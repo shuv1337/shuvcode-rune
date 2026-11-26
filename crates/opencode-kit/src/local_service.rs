@@ -36,9 +36,12 @@ pub fn parse_service_json(text: &str) -> Option<LocalService> {
         None => (v.get("hostname").and_then(Value::as_str).unwrap_or("127.0.0.1"), v.get("port")?.as_u64()?),
     };
     let port = u16::try_from(port).ok().filter(|p| *p > 0)?;
+    // shuv1337 fork: our shuvcode service binds the machine's Tailscale address, not loopback, so
+    // any host its own `service.json` names is accepted (the file is the user's, mode 0600).
     let host = match raw_host.trim() {
         "" | "0.0.0.0" | "localhost" | "127.0.0.1" => "127.0.0.1",
         "::1" | "[::1]" => "[::1]",
+        h if !h.contains(['/', '@', ' ']) => h,
         _ => return None,
     };
     let password = v
@@ -57,9 +60,12 @@ fn candidate_paths(var: impl Fn(&str) -> Option<OsString>) -> Vec<PathBuf> {
     let xdg = |k: &str, fallback: &[&str]| set(k).or_else(|| Some(fallback.iter().fold(home.clone()?, |p, part| p.join(part))));
     let local = var("OPENCODE_DESKTOP_SERVER_CHANNEL").is_some_and(|c| c == "local");
     let registration = if local { "service-local.json" } else { "service.json" };
+    // shuv1337 fork: our local shuvcode service registers under `shuvcode/`, ahead of OpenCode's.
     [
+        xdg("XDG_STATE_HOME", &[".local", "state"]).map(|d| d.join("shuvcode").join(registration)),
         xdg("XDG_STATE_HOME", &[".local", "state"]).map(|d| d.join("opencode").join(registration)),
         set("OPENCODE_CONFIG_DIR").map(|d| d.join("service.json")),
+        xdg("XDG_CONFIG_HOME", &[".config"]).map(|d| d.join("shuvcode").join("service.json")),
         xdg("XDG_CONFIG_HOME", &[".config"]).map(|d| d.join("opencode").join("service.json")),
     ]
     .into_iter()
@@ -100,8 +106,12 @@ pub fn password_for_base(base: &str) -> Option<String> {
     if let Some(password) = page_password(base) {
         return Some(password);
     }
-    let port = local_port(base)?;
     let svc = read_local_service()?;
+    // shuv1337 fork: the registered service may be on a non-loopback (Tailscale) address.
+    if svc.base == base.trim_end_matches('/') {
+        return svc.password;
+    }
+    let port = local_port(base)?;
     (svc.port == port).then_some(svc.password).flatten()
 }
 
