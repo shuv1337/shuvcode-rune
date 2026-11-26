@@ -49,13 +49,10 @@ static STARTED: Once = Once::new();
 /// Whether this process manages its own local OpenCode background service (windowed runs with no
 /// explicit --server, OPENCODE_SERVER_URL, --fixture, or --demo).
 pub fn managed() -> bool {
-    if crate::headless() || crate::arg("--server").is_some() || crate::arg("--fixture").is_some() || crate::demo::requested() {
-        return false;
-    }
-    let explicit_env = std::env::var_os("OPENCODE_SERVER_URL")
-        .and_then(|v| v.into_string().ok())
-        .is_some_and(|v| !v.trim().is_empty());
-    !explicit_env
+    // shuv1337 fork: never install or start a local OpenCode server. We connect only to servers
+    // already running (local shuvcode, the shuvbot host), as before opencode-rune#1303. Every
+    // sidecar entry point is gated on this, so returning false keeps the upstream code dormant.
+    false
 }
 
 /// Starts the background service machine at process boot (before the first window opens),

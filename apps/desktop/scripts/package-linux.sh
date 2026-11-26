@@ -37,7 +37,7 @@ fi
 scheme=${scheme,,}
 install -Dm755 "$bin" "$root/usr/bin/opencode-rune"
 cli_rpm_files=""
-if [ "${OPENCODE_RUNE_BUNDLE_CLI:-1}" != "0" ]; then
+if [ "${OPENCODE_RUNE_BUNDLE_CLI:-0}" = "1" ]; then
   bash "$repo_root/scripts/guardrails/run-js.sh" "$repo_root/scripts/fetch-cli.mjs" \
     --target "linux-$arch" --dest "$root/usr/share/opencode-rune" --channel "$OPENCODE_RUNE_BUILD_CHANNEL"
   cli_rpm_files=$'/usr/share/opencode-rune/opencode-cli\n/usr/share/opencode-rune/opencode-cli.version'

@@ -102,7 +102,7 @@ if ($Payload) {
         $reported = (& $exe --version | Out-String).Trim()
         if ($reported -ne "opencode-rune $version ($channel)") { throw "opencode-desktop --version reported '$reported', expected 'opencode-rune $version ($channel)'" }
     }
-    if ($env:OPENCODE_RUNE_BUNDLE_CLI -ne '0') {
+    if ($env:OPENCODE_RUNE_BUNDLE_CLI -eq '1') {
         $js = if (Get-Command bun -ErrorAction SilentlyContinue) { 'bun' } elseif (Get-Command node -ErrorAction SilentlyContinue) { 'node' } else { throw 'Need bun or node on PATH to fetch bundled opencode-cli.' }
         & $js (Join-Path $root 'scripts/fetch-cli.mjs') --target "windows-$Arch" --dest $stage --channel $channel
         if ($LASTEXITCODE -ne 0) { throw 'fetching bundled opencode-cli failed' }
