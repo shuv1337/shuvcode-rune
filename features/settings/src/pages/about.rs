@@ -183,20 +183,22 @@ fn build_about_page<H: SettingsHost + 'static>(s: &H, p: &Pal, others: u32, vers
     col().key("settings-about").w_full().px(24.0).items_center().child(content)
 }
 
-/// The wordmark's letters, as `AnimatedWordmark` spells it: o p e n c o d e.
-const TARGET: [u8; 8] = [0, 1, 2, 3, 4, 0, 5, 2];
-/// The letters a scramble draws from: o, p, e, n, c, d.
-const CHOICES: u8 = 6;
+/// shuv1337 fork: the wordmark's letters, as `AnimatedWordmark` spells it: s h u v c o d e.
+const TARGET: [u8; 8] = [0, 1, 2, 3, 4, 5, 6, 7];
+/// The letters a scramble draws from: s, h, u, v, c, o, d, e.
+const CHOICES: u8 = 8;
 /// Each letter's rects in its 24 by 42 cell (`settings-about-letter-*`), `true` for its shadow.
 type LetterRect = (f32, f32, f32, f32, bool);
 
-const LETTERS: [&[LetterRect]; 6] = [
-    &[(0., 6., 24., 6., false), (0., 12., 6., 24., false), (18., 12., 6., 24., false), (6., 30., 12., 6., false), (6., 18., 12., 12., true)],
-    &[(0., 6., 24., 6., false), (0., 12., 6., 30., false), (18., 12., 6., 24., false), (6., 30., 12., 6., false), (6., 18., 12., 12., true)],
-    &[(0., 6., 24., 6., false), (0., 12., 6., 24., false), (18., 12., 6., 12., false), (6., 18., 12., 6., false), (6., 30., 18., 6., false), (6., 24., 18., 6., true)],
-    &[(0., 6., 18., 6., false), (0., 12., 6., 24., false), (18., 12., 6., 24., false), (6., 18., 12., 18., true)],
+const LETTERS: [&[LetterRect]; 8] = [
+    &[(0., 6., 24., 6., false), (0., 12., 6., 12., false), (6., 18., 18., 6., false), (18., 24., 6., 12., false), (0., 30., 18., 6., false), (0., 24., 18., 6., true)],
+    &[(0., 0., 6., 36., false), (6., 6., 18., 6., false), (18., 12., 6., 24., false), (6., 18., 12., 18., true)],
+    &[(0., 6., 6., 30., false), (18., 6., 6., 30., false), (6., 30., 12., 6., false), (6., 18., 12., 12., true)],
+    &[(0., 6., 6., 24., false), (18., 6., 6., 24., false), (6., 30., 12., 6., false), (6., 18., 12., 12., true)],
     &[(0., 6., 24., 6., false), (0., 12., 6., 18., false), (0., 30., 24., 6., false), (6., 18., 18., 12., true)],
+    &[(0., 6., 24., 6., false), (0., 12., 6., 24., false), (18., 12., 6., 24., false), (6., 30., 12., 6., false), (6., 18., 12., 12., true)],
     &[(0., 6., 18., 6., false), (18., 0., 6., 36., false), (0., 12., 6., 24., false), (6., 30., 12., 6., false), (6., 18., 12., 12., true)],
+    &[(0., 6., 24., 6., false), (0., 12., 6., 24., false), (18., 12., 6., 12., false), (6., 18., 12., 6., false), (6., 30., 18., 6., false), (6., 24., 18., 6., true)],
 ];
 /// A scramble's step (`tick * 75` ms).
 const TICK: f64 = 0.075;
@@ -242,7 +244,7 @@ impl Wordmark {
 
     /// Formats the current 8 letters as a string (for diagnostic traces).
     pub fn letters_string(&self) -> String {
-        const NAMES: [char; 6] = ['o', 'p', 'e', 'n', 'c', 'd'];
+        const NAMES: [char; 8] = ['s', 'h', 'u', 'v', 'c', 'o', 'd', 'e'];
         self.letters.iter().map(|&l| NAMES[usize::from(l) % NAMES.len()]).collect()
     }
 

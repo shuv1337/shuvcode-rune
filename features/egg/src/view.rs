@@ -134,15 +134,24 @@ pub fn wordmark<H: EggHost + 'static>(s: &H, p: &Pal, width: f32, top: Option<f3
 /// The logo's blocks at `k` points a unit (234 x 42 units): letters in `stem`, the counters'
 /// lower halves in `weak`.
 pub fn logo_at(k: f32, stem: rune::Color, weak: rune::Color) -> El {
+    // shuv1337 fork: "shuvcode" wordmark (matching packages/tui/src/shuv-logo.ts in shuv1337/shuvcode).
     // x, y, w, h in the logo's 234x42 units; `true` for a counter's lower half.
-    const RECTS: [(f32, f32, f32, f32, bool); 40] = [
-        (0., 6., 24., 6., false), (0., 12., 6., 24., false), (18., 12., 6., 24., false), (6., 30., 12., 6., false), (6., 18., 12., 12., true),
-        (30., 6., 24., 6., false), (30., 12., 6., 30., false), (48., 12., 6., 24., false), (36., 30., 12., 6., false), (36., 18., 12., 12., true),
-        (60., 6., 24., 6., false), (60., 12., 6., 24., false), (78., 12., 6., 12., false), (66., 18., 12., 6., false), (66., 30., 18., 6., false), (66., 24., 18., 6., true),
-        (90., 6., 18., 6., false), (90., 12., 6., 24., false), (108., 12., 6., 24., false), (96., 18., 12., 18., true),
+    const RECTS: [(f32, f32, f32, f32, bool); 38] = [
+        // s
+        (0., 6., 24., 6., false), (0., 12., 6., 12., false), (6., 18., 18., 6., false), (18., 24., 6., 12., false), (0., 30., 18., 6., false), (0., 24., 18., 6., true),
+        // h
+        (30., 0., 6., 36., false), (36., 6., 18., 6., false), (48., 12., 6., 24., false), (36., 18., 12., 18., true),
+        // u
+        (60., 6., 6., 30., false), (78., 6., 6., 30., false), (66., 30., 12., 6., false), (66., 18., 12., 12., true),
+        // v
+        (90., 6., 6., 24., false), (108., 6., 6., 24., false), (96., 30., 12., 6., false), (96., 18., 12., 12., true),
+        // c
         (120., 6., 24., 6., false), (120., 12., 6., 18., false), (120., 30., 24., 6., false), (126., 18., 18., 12., true),
+        // o
         (150., 6., 24., 6., false), (150., 12., 6., 24., false), (168., 12., 6., 24., false), (156., 30., 12., 6., false), (156., 18., 12., 12., true),
+        // d
         (180., 6., 18., 6., false), (198., 0., 6., 36., false), (180., 12., 6., 24., false), (186., 30., 12., 6., false), (186., 18., 12., 12., true),
+        // e
         (210., 6., 24., 6., false), (210., 12., 6., 24., false), (228., 12., 6., 12., false), (216., 18., 12., 6., false), (216., 30., 18., 6., false), (216., 24., 18., 6., true),
     ];
     // A picture, as Desktop's SVG and canvas are: right to left doesn't mirror it.

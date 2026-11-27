@@ -105,6 +105,10 @@ if (localService !== null) {
   }
 }
 mustContain("crates/opencode-kit/src/client.rs", 'DEFAULT_SERVER: &str = "http://127.0.0.1:4919"', "fork delta: Shuvcode default port 0x1337");
+mustContain("features/egg/src/view.rs", 'shuv1337 fork: "shuvcode" wordmark', "canonical shuvcode new-session wordmark");
+mustContain("features/egg/src/draw.rs", 'shuv1337 fork: "shuvcode" logo blocks', "canonical shuvcode animated wordmark");
+mustContain("features/egg/src/pins/mod.rs", 'shuv1337 fork: the "shuvcode" wordmark', "canonical shuvcode 3D pin board");
+mustContain("features/settings/src/pages/about.rs", "['s', 'h', 'u', 'v', 'c', 'o', 'd', 'e']", "canonical shuvcode About wordmark");
 const updaterPlatform = read("features/updater/src/platform.rs");
 if (updaterPlatform !== null && !/fn fork_updater_enabled\(\) -> bool \{\s*(?:\/\/[^\n]*\n\s*)*false\s*\}/.test(updaterPlatform)) {
   errors.push("features/updater/src/platform.rs: fork_updater_enabled() must return false so fork never auto-updates from anoma.ly");
