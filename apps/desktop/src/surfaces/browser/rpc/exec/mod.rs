@@ -153,6 +153,10 @@ pub(super) struct ActiveCommand {
 }
 
 impl ActiveCommand {
+    pub fn target_host_tab(&self) -> u64 {
+        self.phase.target_host_tab()
+    }
+
     pub fn cancel_cleanup(
         &mut self,
         att: &mut SessionAttachment,
@@ -252,6 +256,11 @@ pub(super) fn start_command(
         return;
     }
     let _ = att.sync_tabs(app);
+    if let Some(wire_id) = cmd.tab_id()
+        && let Ok(hid) = att.resolve_tab(app, wire_id)
+    {
+        super::hold::acquire_now(att, app, hid);
+    }
     if cmd.is_inspect() {
         match read::start_inspect(att, app, cmd) {
             StepOutcome::Done(outcome) => {

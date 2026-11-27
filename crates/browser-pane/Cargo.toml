@@ -11,7 +11,7 @@ default = []
 # Download, start and talk to the CEF engine over a Unix socket (AF_UNIX on Windows too). Without it,
 # the pane keeps its tab model and reports `EngineStatus::Unsupported`. The app turns it on for macOS,
 # Windows, and Linux.
-engine = ["dep:authenticode", "dep:libc", "dep:memchr", "dep:ring", "dep:rusqlite", "dep:rusty-leveldb", "dep:security-framework", "dep:sha2", "dep:ureq", "dep:uds_windows", "dep:windows", "dep:zstd"]
+engine = ["dep:authenticode", "dep:libc", "dep:memchr", "dep:net-trust", "dep:ring", "dep:rusqlite", "dep:rusty-leveldb", "dep:security-framework", "dep:sha2", "dep:ureq", "dep:uds_windows", "dep:windows", "dep:zstd"]
 # Harness builds: injected faults (`unpack.rs`), never in a release.
 faults = ["engine"]
 
@@ -19,6 +19,8 @@ faults = ["engine"]
 base64.workspace = true
 browser-extensions = { path = "../browser-extensions" }
 browser-policy = { path = "../browser-policy" }
+# The operating system's certificate check, as every request of the app (the engine download).
+net-trust = { path = "../net-trust", optional = true }
 opencode-i18n = { path = "../opencode-i18n" }
 rune.workspace = true
 rusqlite = { version = "0.41", default-features = false, features = ["bundled", "limits"] }

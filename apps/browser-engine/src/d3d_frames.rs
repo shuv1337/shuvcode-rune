@@ -9,37 +9,55 @@
 //! the frame is dropped, and the engine repaints the tab once one frees up.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
-use windows::Win32::Foundation::{CloseHandle, GENERIC_ALL, HANDLE, HMODULE, LUID};
+use windows::Win32::Foundation::{CloseHandle, GENERIC_ALL, HANDLE, HMODULE, LUID, WAIT_OBJECT_0};
 use windows::Win32::Graphics::Direct3D::{
     D3D_DRIVER_TYPE_HARDWARE, D3D_DRIVER_TYPE_UNKNOWN, D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_11_1,
 };
 use windows::Win32::Graphics::Direct3D11::{
     D3D11_BIND_RENDER_TARGET, D3D11_BIND_SHADER_RESOURCE, D3D11_CREATE_DEVICE_BGRA_SUPPORT,
-    D3D11_FENCE_FLAG_SHARED, D3D11_QUERY_DESC, D3D11_QUERY_EVENT, D3D11_RESOURCE_MISC_SHARED,
-    D3D11_RESOURCE_MISC_SHARED_NTHANDLE, D3D11_SDK_VERSION, D3D11_TEXTURE2D_DESC, D3D11_USAGE_DEFAULT,
-    D3D11CreateDevice, ID3D11Device, ID3D11Device1, ID3D11Device5, ID3D11DeviceContext, ID3D11Fence,
-    ID3D11Query, ID3D11Texture2D,
+    D3D11_FENCE_FLAG_NONE, D3D11_FENCE_FLAG_SHARED, D3D11_QUERY_DESC, D3D11_QUERY_EVENT,
+    D3D11_RESOURCE_MISC_SHARED, D3D11_RESOURCE_MISC_SHARED_NTHANDLE, D3D11_SDK_VERSION,
+    D3D11_TEXTURE2D_DESC, D3D11_USAGE_DEFAULT, D3D11CreateDevice, ID3D11Device, ID3D11Device1,
+    ID3D11Device5, ID3D11DeviceContext, ID3D11DeviceContext4, ID3D11Fence, ID3D11Query,
+    ID3D11Texture2D,
 };
 use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_SAMPLE_DESC};
 use windows::Win32::Graphics::Dxgi::{
     CreateDXGIFactory1, DXGI_SHARED_RESOURCE_READ, DXGI_SHARED_RESOURCE_WRITE, IDXGIAdapter, IDXGIFactory4,
     IDXGIResource1,
 };
+use windows::Win32::System::Threading::{CreateEventW, ResetEvent, WaitForSingleObject};
 use windows::core::{HSTRING, Interface};
 
-const SLOTS: usize = 3;
+/// Shared texture ring depth per tab: 5 absorbs high-refresh (165-240 Hz) swap-chain + IPC jitter
+/// while staying well inside Rune's 16-entry opened-texture cache.
+const SLOTS: usize = 5;
+
+enum CopySync {
+    /// Zero-spin GPU fence + Win32 auto-reset event (D3D11.4).
+    Fence {
+        context4: ID3D11DeviceContext4,
+        fence: ID3D11Fence,
+        event: Owned,
+        value: AtomicU64,
+    },
+    /// Fallback event query when `ID3D11DeviceContext4` is unavailable.
+    Query(ID3D11Query),
+}
 
 /// The engine's D3D11 device, on the app's GPU. COM calls on it happen on CEF's UI thread only.
 pub struct Gpu {
     device: ID3D11Device5,
     context: ID3D11DeviceContext,
-    query: ID3D11Query,
+    sync: CopySync,
 }
 
-// SAFETY: D3D11 devices are free-threaded; the immediate context and query are used only on CEF's
-// UI thread (`OnAcceleratedPaint` and the engine's message loop), never concurrently.
+// SAFETY: D3D11 devices are free-threaded; the immediate context and `sync` (`context4`,
+// `fence`, `event`, and fallback `query`) are used only on CEF's UI thread (`OnAcceleratedPaint`
+// and the engine's message loop), never concurrently.
 unsafe impl Send for Gpu {}
 unsafe impl Sync for Gpu {}
 
@@ -68,37 +86,99 @@ impl Gpu {
         }
         .ok()?;
         let device: ID3D11Device5 = device?.cast().ok()?;
-        let mut query = None;
-        unsafe { device.CreateQuery(&D3D11_QUERY_DESC { Query: D3D11_QUERY_EVENT, MiscFlags: 0 }, Some(&mut query)) }
-            .ok()?;
-        Some(Arc::new(Self { device, context: context?, query: query? }))
+        let context = context?;
+        let sync = Self::make_fence_sync(&device, &context).or_else(|| {
+            let mut query = None;
+            unsafe { device.CreateQuery(&D3D11_QUERY_DESC { Query: D3D11_QUERY_EVENT, MiscFlags: 0 }, Some(&mut query)) }
+                .ok()?;
+            Some(CopySync::Query(query?))
+        })?;
+        Some(Arc::new(Self { device, context, sync }))
     }
 
-    /// Waits until the GPU has run everything submitted so far (a copy takes well under a
-    /// millisecond). False if the device was lost or it took over a second.
+    fn make_fence_sync(device: &ID3D11Device5, context: &ID3D11DeviceContext) -> Option<CopySync> {
+        let context4: ID3D11DeviceContext4 = context.cast().ok()?;
+        let mut fence: Option<ID3D11Fence> = None;
+        // SAFETY: `device` is live; `fence` receives a newly created COM interface.
+        unsafe { device.CreateFence(0, D3D11_FENCE_FLAG_NONE, &mut fence) }.ok()?;
+        // SAFETY: creates a private auto-reset Win32 event closed by `Owned`.
+        let event = unsafe { CreateEventW(None, false, false, windows::core::PCWSTR::null()) }.ok()?;
+        Some(CopySync::Fence {
+            context4,
+            fence: fence?,
+            event: Owned(event),
+            value: AtomicU64::new(0),
+        })
+    }
+
+    /// Waits until the GPU has run everything submitted so far (a copy takes ~0.1 ms). False if
+    /// the device was lost or it took over a second.
     fn finish(&self) -> bool {
-        unsafe {
-            self.context.End(&self.query);
-            self.context.Flush();
-        }
-        let start = Instant::now();
-        loop {
-            let mut done = windows::core::BOOL(0);
-            let polled = unsafe {
-                self.context.GetData(
-                    &self.query,
-                    Some((&raw mut done).cast()),
-                    std::mem::size_of::<windows::core::BOOL>() as u32,
-                    0,
-                )
-            };
-            if polled.is_err() || start.elapsed() > Duration::from_secs(1) {
-                return false;
+        match &self.sync {
+            CopySync::Fence { context4, fence, event, value } => {
+                let next = value.fetch_add(1, Ordering::Relaxed).wrapping_add(1);
+                // SAFETY: `context4`, `fence`, and `event` are owned by `self` and live on CEF's UI thread.
+                unsafe {
+                    if context4.Signal(fence, next).is_err() {
+                        return false;
+                    }
+                    self.context.Flush();
+                    let completed = fence.GetCompletedValue();
+                    // `u64::MAX` signals device removal / TDR (ID3D11Fence::GetCompletedValue).
+                    if completed == u64::MAX {
+                        return false;
+                    }
+                    if completed >= next {
+                        return true;
+                    }
+                    // Clear any stale signal left by a previously timed-out wait before re-arming.
+                    let _ = ResetEvent(event.0);
+                    if fence.SetEventOnCompletion(next, event.0).is_err() {
+                        return false;
+                    }
+                    let deadline = Instant::now() + Duration::from_secs(1);
+                    loop {
+                        let completed = fence.GetCompletedValue();
+                        if completed == u64::MAX {
+                            return false;
+                        }
+                        if completed >= next {
+                            return true;
+                        }
+                        let Some(rem) = deadline.checked_duration_since(Instant::now()) else {
+                            return false;
+                        };
+                        if WaitForSingleObject(event.0, rem.as_millis().clamp(1, 1000) as u32) != WAIT_OBJECT_0 {
+                            return false;
+                        }
+                    }
+                }
             }
-            if done.as_bool() {
-                return true;
+            CopySync::Query(query) => {
+                unsafe {
+                    self.context.End(query);
+                    self.context.Flush();
+                }
+                let start = Instant::now();
+                loop {
+                    let mut done = windows::core::BOOL(0);
+                    let polled = unsafe {
+                        self.context.GetData(
+                            query,
+                            Some((&raw mut done).cast()),
+                            std::mem::size_of::<windows::core::BOOL>() as u32,
+                            0,
+                        )
+                    };
+                    if polled.is_err() || start.elapsed() > Duration::from_secs(1) {
+                        return false;
+                    }
+                    if done.as_bool() {
+                        return true;
+                    }
+                    std::thread::yield_now();
+                }
             }
-            std::thread::yield_now();
         }
     }
 }
@@ -205,6 +285,14 @@ impl TabFrames {
         for slot in &mut self.slots {
             slot.frame = 0;
         }
+    }
+
+    /// Drops every shared D3D11 texture while a tab is hidden to release GPU/shared memory.
+    /// The next `copy()` allocates a fresh generation so named shared handles never collide.
+    pub fn release_slots(&mut self) {
+        self.slots.clear();
+        self.size = (0, 0);
+        self.dropped = false;
     }
 
     fn resize(&mut self, width: u32, height: u32) -> Option<()> {

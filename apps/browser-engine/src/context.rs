@@ -290,7 +290,7 @@ fn set_and_verify_pref(
     current() || refuse_pref(name, "did not keep the value")
 }
 
-fn pref_settable(ctx: &RequestContext, key: &CefString, name: &str) -> bool {
+fn pref_settable(ctx: &RequestContext, key: &CefString, _name: &str) -> bool {
     // Debug builds only: stands in for a policy-locked pref in the policy proof.
     #[cfg(debug_assertions)]
     if std::env::var("OPENCODE_BROWSER_DEBUG_READONLY_PREFS").is_ok_and(|v| v.split(',').any(|n| n == name)) {

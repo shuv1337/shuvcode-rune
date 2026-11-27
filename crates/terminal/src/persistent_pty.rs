@@ -103,8 +103,8 @@ pub(crate) fn run_persistent_worker(
     let Some((mut screen, mut grid)) = restore(&config, &snapshot, &shared, &waker) else { return };
     let mut conn = Connection::new();
     let mut sizing = Sizing::Unmeasured;
-    let mut ws = match tungstenite::connect(&url) {
-        Ok((socket, _)) => socket,
+    let mut ws = match connect(&url) {
+        Ok(socket) => socket,
         // Setting the socket up failed (`socket.errored`).
         Err(_) => return errored(&mut conn, &shared, &waker),
     };
@@ -137,6 +137,26 @@ pub(crate) fn run_persistent_worker(
             ws.close(None).ok();
             ws.flush().ok();
         }
+    }
+}
+
+/// Opens the attachment's WebSocket as `tungstenite::connect` does, a `wss://` server's
+/// certificate checked as the operating system checks it (`net_trust`); a `ws://` one builds no
+/// TLS configuration.
+#[cfg(not(target_arch = "wasm32"))]
+fn connect(url: &str) -> tungstenite::Result<Socket> {
+    use tungstenite::client::IntoClientRequest as _;
+    let request = url.into_client_request()?;
+    let uri = request.uri();
+    let host = uri.host().ok_or(tungstenite::Error::Url(tungstenite::error::UrlError::NoHostName))?;
+    let host = host.trim_start_matches('[').trim_end_matches(']').to_owned();
+    let tls = uri.scheme_str() == Some("wss");
+    let port = uri.port_u16().unwrap_or(if tls { 443 } else { 80 });
+    let tcp = TcpStream::connect((host.as_str(), port))?;
+    match tungstenite::client_tls_with_config(request, tcp, None, tls.then(net_trust::rustls_client_config).flatten().map(tungstenite::Connector::Rustls)) {
+        Ok((socket, _)) => Ok(socket),
+        Err(tungstenite::HandshakeError::Failure(e)) => Err(e),
+        Err(tungstenite::HandshakeError::Interrupted(_)) => Err(tungstenite::Error::Io(ErrorKind::WouldBlock.into())),
     }
 }
 

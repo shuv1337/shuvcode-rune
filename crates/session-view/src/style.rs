@@ -45,6 +45,13 @@ pub struct ThoughtPart<'a> {
 /// (`timeline-next.css:40-45`, `reasoning-part-run`). `thinking`: the row reads Thinking.
 #[allow(clippy::too_many_arguments)]
 pub fn reasoning<S: TimelineHost>(s: &S, p: &Pal, key: &str, parts: &[ThoughtPart], secs: Option<i64>, thinking: bool, open: bool, fade: f32) -> El {
+    reasoning_at(s, p, key, parts, secs, thinking, open, fade, sticky_top())
+}
+
+/// Like [`reasoning`], pinning an open header `sticky` points below the scroll viewport's top
+/// (`opencode#65246`, matching open tool groups in `turns::group` and `compaction::quiet_view`).
+#[allow(clippy::too_many_arguments)]
+pub fn reasoning_at<S: TimelineHost>(s: &S, p: &Pal, key: &str, parts: &[ThoughtPart], secs: Option<i64>, thinking: bool, open: bool, fade: f32, sticky: f32) -> El {
     let streaming = thinking;
     // `hideDetails={props.parts.every((part) => !part.text.trim())}` (`thought.tsx:50`).
     let has_details = parts.iter().any(|part| !part.body.trim().is_empty());
@@ -64,6 +71,7 @@ pub fn reasoning<S: TimelineHost>(s: &S, p: &Pal, key: &str, parts: &[ThoughtPar
         // are then nothing new for a reader, and the tree leaves them out.
         .label(label)
         .busy(streaming)
+        .w_full()
         .h(28.0)
         .gap(6.0)
         .center_y()
@@ -73,6 +81,7 @@ pub fn reasoning<S: TimelineHost>(s: &S, p: &Pal, key: &str, parts: &[ThoughtPar
         .child(title.key(if streaming { "thinking" } else { "thought" }))
         .children(subtitle.map(|t| text(t).key("subtitle").font(UI.features("'tnum' 1")).color(p.muted).shrink().min_w(0.0).truncate_fade()));
     // A row whose thoughts are all empty is neither expandable nor clickable (`hideDetails`).
+    let hold = format!("{key}/head");
     let trigger = if has_details {
         let a = el().key("arrow").w(16.0).h(24.0).center().child(arrow(p, open));
         trigger
@@ -82,12 +91,23 @@ pub fn reasoning<S: TimelineHost>(s: &S, p: &Pal, key: &str, parts: &[ThoughtPar
             .hover_group_focus()
             // The triangle fades in under the pointer or keyboard focus (`collapsible.css:26-29`).
             .hover_motion(HOVER_FADE, HOVER_FADE)
-            .on_press_tx(crate::disclosure::set::<S>(key.to_owned(), open, format!("{key}/trigger")))
+            .on_press_tx(crate::disclosure::set::<S>(key.to_owned(), open, hold.clone()))
             .child(if open || hover_none() { a } else { a.group_opacity(0.0, 1.0) })
     } else {
         trigger.role("group")
     };
-    let mut c = col().w_full().child(trigger);
+    // Square opaque `bg_base` bar behind the rounded trigger so lines and the nested rail
+    // scrolling beneath never peek through corners, and a collapsing body (`disclosure::reveal`
+    // under Rune's `Hold`) wipes cleanly under it.
+    let mut head = row().key("head").w_full().child(trigger);
+    if has_details {
+        head = head.fill(p.bg_base);
+    }
+    if open && has_details {
+        let soft = rune::Shadow { y: 10.0, blur: 20.0, color: p.bg_base, ..Default::default() };
+        head = head.sticky_top(sticky).stuck_shadow(soft);
+    }
+    let mut c = col().w_full().child(head);
     if open && has_details {
         let md = |part: &ThoughtPart| {
             let style = markdown_style(p, p.muted, content_w() - 48.0).body_font(THOUGHT).heading_font(1, THOUGHT).heading_font(2, THOUGHT).heading_font(3, THOUGHT).heading_font(4, THOUGHT);
@@ -103,7 +123,7 @@ pub fn reasoning<S: TimelineHost>(s: &S, p: &Pal, key: &str, parts: &[ThoughtPar
         };
         c = c.child(crate::disclosure::reveal(
             s.knobs(),
-            nested_collapsible(p, NESTED_GAP, body, crate::disclosure::set::<S>(key.to_owned(), true, format!("{key}/trigger"))),
+            nested_collapsible(p, NESTED_GAP, body, crate::disclosure::set::<S>(key.to_owned(), true, hold)),
         ));
     }
     c
@@ -188,6 +208,9 @@ pub fn markdown_styled_wrap<S: TimelineHost, H: rune_kit::markdown::HighlightIte
         .streaming(streaming)
         .selectable(true)
         .scroll_wide(true)
+        // Official Markdown sets `overflow-wrap: break-word` (`packages/session-ui/src/components/markdown.css:54`)
+        // so long URLs wrap inside the column while `scroll_wide(true)` keeps code and tables scrolling.
+        .wrap_anywhere(true)
         .wrap_code(wrap_default)
         .diagram_frame(move |card, d| crate::diagram::frame::<S>(&pal, card, d, &full))
         .code_frame(move |card, c| code_card::<S>(&pal, card, c, &copied, wrap_default, &wrap_scope))

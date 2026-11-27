@@ -1085,7 +1085,7 @@
   "settings.about.otherContributor.other": "{{count}} άλλοι",
   "settings.about.tagline": "Το AI δεν μπορεί να δημιουργήσει εξαιρετικό λογισμικό, χωρίς εσάς",
   "settings.about.trademark": "Το OpenCode είναι σήμα κατατεθέν της Anomaly Innovations, Inc.",
-  "settings.about.typeset": "Δακτυλογράφηση σε Inter και IBM Plex Mono",
+  "settings.about.typeset": "Δακτυλογράφηση σε Inter και OpenMono",
   "settings.about.version": "Έκδοση {{version}}",
   "settings.about.website": "www.opencode.ai",
   "settings.about.writtenByNames": "Γράφτηκε από {{names}}",

@@ -66,6 +66,9 @@ pub struct TabSnapshot {
     /// `replaceState` and hash changes. `0` from engines before it existed.
     #[serde(default)]
     pub document: u64,
+    /// Whether this tab is producing audible audio (reserved for Phase 2 hibernation protection).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub audible: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -113,6 +116,8 @@ pub enum HostMsg {
         extensions: bool,
         #[serde(default)]
         download_save: bool,
+        #[serde(default)]
+        tab_lifecycle: bool,
     },
     OpenTab {
         tab_id: u64,
@@ -155,6 +160,10 @@ pub enum HostMsg {
     SetTabPolicy { tab_id: u64, file_roots: Vec<String> },
     CloseTab { tab_id: u64 },
     FocusTab { tab_id: u64 },
+    /// Exact set of currently visible pane tabs (`vec![]` when panel closed, on Home/Settings, or hidden).
+    SetVisibleTabs { tab_ids: Vec<u64> },
+    /// Explicit agent RPC unthrottle hold, decoupled from security-sticky `agent_driven`.
+    SetTabUnthrottled { tab_id: u64, active: bool },
     Navigate { tab_id: u64, url: String },
     Back { tab_id: u64 },
     Forward { tab_id: u64 },
@@ -166,6 +175,7 @@ pub enum HostMsg {
     Stop { tab_id: u64 },
     SetZoom { tab_id: u64, factor: f64 },
     SetColorScheme { dark: bool },
+    SetFrameRate { fps: u32 },
     Resize { tab_id: u64, width_pt: f32, height_pt: f32, scale: f32 },
     Emulate { tab_id: u64, device: Option<device::Device>, scale: f32 },
     MouseMove { tab_id: u64, x: f32, y: f32, mods: u8, leave: bool },
@@ -387,6 +397,9 @@ pub enum EngineMsg {
         /// `PageContextMenu.{spellcheck, languages, dictionaries}`.
         #[serde(default)]
         menu_extras: bool,
+        /// The engine supports `SetVisibleTabs` and `SetTabUnthrottled` tab visibility lifecycle.
+        #[serde(default)]
+        tab_lifecycle: bool,
     },
     /// Copy image's result: the image under the menu, as PNG (base64), for the app's clipboard.
     CopiedImage { tab_id: u64, png_b64: String },

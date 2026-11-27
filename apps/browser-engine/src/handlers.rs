@@ -201,6 +201,7 @@ wrap_render_handler! {
         mach_port: Arc<AtomicU32>,
         out_tx: Output,
         frame_seq: Arc<AtomicU64>,
+        awake: Arc<AtomicBool>,
         frames: FrameRing,
         failures: Failures,
     }
@@ -240,7 +241,7 @@ wrap_render_handler! {
             _dirty: Option<&[Rect]>,
             info: Option<&AcceleratedPaintInfo>,
         ) {
-            if type_ != PaintElementType::default() {
+            if type_ != PaintElementType::default() || !self.awake.load(Ordering::Acquire) {
                 return;
             }
             let Some(info) = info else { return };
@@ -298,7 +299,12 @@ wrap_render_handler! {
             width: i32,
             height: i32,
         ) {
-            if type_ != PaintElementType::default() || buffer.is_null() || width <= 0 || height <= 0 {
+            if type_ != PaintElementType::default()
+                || !self.awake.load(Ordering::Acquire)
+                || buffer.is_null()
+                || width <= 0
+                || height <= 0
+            {
                 return;
             }
             let id = self.frame_seq.fetch_add(1, Ordering::Relaxed) + 1;
@@ -1310,8 +1316,14 @@ pub fn wheel_delta(dx: f32, dy: f32) -> (f32, f32) {
         // WHEEL_PAGESCROLL (u32::MAX) pages instead of lines; keep the default then.
         if read.is_ok() && (1..1000).contains(&value) { value as f32 } else { 3.0 }
     };
-    let units = |px: f32, per_notch: f32| px * 120.0 / (per_notch * 100.0 / 3.0);
-    (units(dx, setting(SPI_GETWHEELSCROLLCHARS)), units(dy, setting(SPI_GETWHEELSCROLLLINES)))
+    let units = |px: f32, action| {
+        if px == 0.0 {
+            0.0
+        } else {
+            px * 120.0 / (setting(action) * 100.0 / 3.0)
+        }
+    };
+    (units(dx, SPI_GETWHEELSCROLLCHARS), units(dy, SPI_GETWHEELSCROLLLINES))
 }
 
 /// The key's `native_key_code`: a macOS virtual key code, or on Windows the `WM_KEYDOWN`

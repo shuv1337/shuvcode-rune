@@ -1085,7 +1085,7 @@
   "settings.about.otherContributor.other": "อีก {{count}} คน",
   "settings.about.tagline": "AI ไม่สามารถสร้างซอฟต์แวร์ที่ยอดเยี่ยมได้หากไม่มีคุณ",
   "settings.about.trademark": "OpenCode เป็นเครื่องหมายการค้าจดทะเบียนของ Anomaly Innovations, Inc.",
-  "settings.about.typeset": "เรียงพิมพ์ใน Inter และ IBM Plex Mono",
+  "settings.about.typeset": "เรียงพิมพ์ใน Inter และ OpenMono",
   "settings.about.version": "เวอร์ชัน {{version}}",
   "settings.about.website": "www.opencode.ai",
   "settings.about.writtenByNames": "เขียนโดย {{names}}",

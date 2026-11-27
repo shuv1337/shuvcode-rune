@@ -20,13 +20,9 @@ pub fn subagent_page(host: &dyn SubagentsHost) -> Option<&SessionInfo> {
     host.session_info(id).filter(|i| i.parent.is_some())
 }
 
-/// The write that sends `prompt` to `session`. A subagent's moves home first when its folder is
-/// gone.
-pub fn send_write(host: &dyn SubagentsHost, session: &str, prompt: Prompt) -> Write {
-    if !host.session_info(session).is_some_and(|i| i.parent.is_some()) {
-        return Write::Send { session: session.to_owned(), prompt };
-    }
-    Write::SendMovingHome { session: session.to_owned(), prompt }
+/// The write that sends `prompt` to `session`, a subagent's as any other.
+pub fn send_write(_host: &dyn SubagentsHost, session: &str, prompt: Prompt) -> Write {
+    Write::Send { session: session.to_owned(), prompt }
 }
 
 /// Whether the open page is a subagent's with nothing typed in its composer.

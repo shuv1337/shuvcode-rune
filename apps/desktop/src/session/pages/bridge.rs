@@ -46,6 +46,12 @@ pub(super) struct Held {
     messages: Vec<Message>,
 }
 
+impl Held {
+    pub(super) fn awaits(&self, cursor: &str) -> bool {
+        matches!(&self.bridge, Bridge::Reading { cursor: awaited, .. } if awaited == cursor)
+    }
+}
+
 /// How many loaded messages that were still running are read again after one read.
 const REFRESH: usize = 16;
 
@@ -60,14 +66,15 @@ impl App {
                     t.merge(page.messages.clone());
                 }
             }
-            ReadOf::Before(cursor) if self.pages.bridges.get(&id).is_some_and(|h| matches!(&h.bridge, Bridge::Reading { cursor: awaited, .. } if awaited == cursor)) => {
+            ReadOf::Before(cursor) if self.pages.bridges.get(&id).is_some_and(|h| h.awaits(cursor)) => {
                 let Some(held) = self.pages.bridges.remove(&id) else { return };
                 let mut messages = page.messages.clone();
                 messages.extend(held.messages);
                 let meets = self.transcripts.get(&id).is_none_or(|t| !apart(t, &messages));
                 self.step_bridge(Some(&held.bridge), held.newest, messages, BridgeEvent::Landed { meets, cursor: page.cursor.clone() }, tx);
             }
-            ReadOf::Before(_) => self.merge_joined(page, tx),
+            ReadOf::Before(cursor) if self.pages.awaits_history(&id, cursor) => self.merge_joined(page, tx),
+            ReadOf::Before(_) => {}
             ReadOf::Newest => {
                 // A newer read takes the place of one still on its way to the loaded messages.
                 self.pages.bridges.remove(&id);

@@ -1085,7 +1085,7 @@
   "settings.about.otherContributor.other": "अन्य {{count}}",
   "settings.about.tagline": "तपाईंबिना AI ले उत्कृष्ट सफ्टवेयर बनाउन सक्दैन",
   "settings.about.trademark": "OpenCode, Anomaly Innovations, Inc. को दर्ता गरिएको ट्रेडमार्क हो।",
-  "settings.about.typeset": "Inter र IBM Plex Mono मा अक्षर संयोजन",
+  "settings.about.typeset": "Inter र OpenMono मा अक्षर संयोजन",
   "settings.about.version": "संस्करण {{version}}",
   "settings.about.website": "www.opencode.ai",
   "settings.about.writtenByNames": "{{names}} द्वारा लिखित",

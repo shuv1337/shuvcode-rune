@@ -99,3 +99,5 @@ features/connect/src/steps/auth.rs | selectable | 2 | the code and the command's
 features/connect/src/usage_limit.rs | selectable | 1 | the usage limit's detail: packages/app/src/providers/connect/chatgpt-usage-limit.tsx:73 select-text
 apps/desktop/src/plugin_host/runtime/trust.rs | selectable | 1 | a plugin's origin in the trust prompt: ours only (no official counterpart); kept so the path can be copied
 apps/desktop/src/surfaces/browser/prompts/view.rs | selectable | 1 | a page prompt's message: packages/gui-plugins/src/browser/refusal-bar.tsx:102 select-text
+apps/desktop/src/session/composer/location_missing/view.rs | selectable | 1 | the missing location's path: packages/app/src/session/composer/location-missing.css:46 user-select: text
+apps/desktop/src/surfaces/automations/view.rs | selectable | 1 | Automations inspector content box (prompt/code/output): packages/app/src/automations/view.tsx:251 select-text

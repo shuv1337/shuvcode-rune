@@ -182,10 +182,10 @@ pub fn fold(k: &Knobs) -> Spring {
     Spring::new(k.get(&FOLD_SPEED), 0.0)
 }
 
-/// What a disclosure shows open (a tool's output, a thought, a file's change), on the fold's
-/// spring: it wipes in from its top while the rows below slide down on the same spring ([`set`],
-/// [`toggle`]), and shutting, wipes back up as its slot closes. `content` needs a key that holds
-/// from build to build.
+/// What a disclosure shows open (a tool's output, a thought), on the fold's spring: it wipes in
+/// from its top while the rows below slide down on the same spring ([`set`], [`toggle`]), and
+/// shutting, wipes back up as its slot closes. `content` needs a key that holds from build to
+/// build.
 pub fn reveal(k: &Knobs, content: El) -> El {
     let spring = fold(k);
     let mut t = Transition::reveal(Edge::Top).springs(SpringPair::new(spring, spring)).hold_layout();
@@ -227,6 +227,19 @@ pub fn set_open<S: TimelineHost>(s: &mut S, key: &str, open: bool) {
 pub fn set<S: TimelineHost>(key: String, open: bool, hold: String) -> impl Fn(&mut S, &mut Tx) + 'static {
     move |s: &mut S, tx: &mut Tx| {
         tx.motion(fold(s.knobs()));
+        set_open(s, &key, !open);
+        anchor(s, tx, !open, &hold, &hold);
+    }
+}
+
+/// A press handler that opens or shuts `key` without layout or growth motion, keeping `hold` in
+/// place when scrolled up: for a file diff (`packages/session-ui/src/timeline-next/tools/patch.tsx`
+/// `FileAccordionItem`, `packages/ui/src/data-display/accordion/accordion.css`), whose content
+/// mounts and unmounts directly under its header instead of re-running its parent group's fold
+/// glide.
+pub fn set_instant<S: TimelineHost>(key: String, open: bool, hold: String) -> impl Fn(&mut S, &mut Tx) + 'static {
+    move |s: &mut S, tx: &mut Tx| {
+        tx.instant();
         set_open(s, &key, !open);
         anchor(s, tx, !open, &hold, &hold);
     }

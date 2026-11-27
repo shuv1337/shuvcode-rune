@@ -609,7 +609,7 @@ impl Server {
         if abort.is_aborted() {
             return Err(RpcCallError::Aborted);
         }
-        let mut config_builder = ureq::Agent::config_builder()
+        let mut config_builder = net_trust::agent_config_for(&self.base)
             .http_status_as_error(false)
             .max_redirects(0)
             .max_idle_connections(0)

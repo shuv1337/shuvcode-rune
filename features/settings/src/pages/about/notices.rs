@@ -438,15 +438,17 @@ fn parse_entry_head(s: &str) -> (String, Option<String>, Option<String>, Option<
 }
 
 fn split_license_dash(s: &str) -> (&str, Option<&str>) {
-    // Split on the last ` — ` or ` - ` outside parentheses so `(`...`) — MIT License` splits cleanly.
+    // Split on the last ` — ` or ` - ` outside parentheses (or a leading `— `/`- ` when an entry
+    // has no parenthesized URL, such as OpenMono), iterating on UTF-8 char boundaries.
+    if let Some(rest) = s.strip_prefix("— ").or_else(|| s.strip_prefix("- ")) {
+        return ("", Some(rest.trim()));
+    }
     let mut depth = 0usize;
     let mut last_split: Option<(usize, usize)> = None;
-    let bytes = s.as_bytes();
-    let mut i = 0;
-    while i < bytes.len() {
-        match bytes[i] {
-            b'(' => depth += 1,
-            b')' => depth = depth.saturating_sub(1),
+    for (i, ch) in s.char_indices() {
+        match ch {
+            '(' => depth += 1,
+            ')' => depth = depth.saturating_sub(1),
             _ if depth == 0 => {
                 if s[i..].starts_with(" — ") {
                     last_split = Some((i, " — ".len()));
@@ -456,7 +458,6 @@ fn split_license_dash(s: &str) -> (&str, Option<&str>) {
             }
             _ => {}
         }
-        i += 1;
     }
     match last_split {
         Some((at, len)) => (&s[..at], Some(s[at + len..].trim())),
@@ -505,7 +506,10 @@ fn dedent(lines: &[&str]) -> String {
     let min_indent = lines.iter().filter(|l| !l.trim().is_empty()).map(|l| l.len() - l.trim_start_matches(' ').len()).min().unwrap_or(0);
     lines
         .iter()
-        .map(|l| if l.len() >= min_indent { &l[min_indent..] } else { l.trim_start() })
+        .map(|l| {
+            let strip = l.bytes().take(min_indent).take_while(|&b| b == b' ').count();
+            if strip == min_indent { &l[strip..] } else { l.trim_start() }
+        })
         .collect::<Vec<_>>()
         .join("\n")
         .trim()

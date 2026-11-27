@@ -350,6 +350,11 @@ pub trait ProjectsHost: opencode_kernel::AppEnv + opencode_kernel::AppOverlays {
     fn open_draft_in(&mut self, server: &ServerKey, directory: &str, tx: &mut Tx) {
         let _ = (server, directory, tx);
     }
+    /// The folder picked for a session whose own is gone (its card's Choose directory), or none
+    /// when the pick ended with nothing; `attempt` is the pick the card asked for.
+    fn session_location_picked(&mut self, attempt: rune::machine::Attempt, directory: Option<String>, tx: &mut Tx) {
+        let _ = (attempt, directory, tx);
+    }
     /// Opens session `id` on `server` (checking out `server` if parked).
     fn open_session(&mut self, server: &ServerKey, id: &str, tx: &mut Tx) {
         let _ = (server, id, tx);

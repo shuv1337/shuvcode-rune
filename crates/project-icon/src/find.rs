@@ -341,10 +341,17 @@ pub(crate) enum Data {
 
 /// A `data:` URL's image, base64 or percent-encoded. Other URLs and types are None.
 pub(crate) fn data_url(u: &str) -> Option<Data> {
+    // Reject oversized data URLs before decoding (matches repo icon MAX_BYTES = 8 MiB).
+    if u.len() > (MAX_BYTES as usize) * 2 {
+        return None;
+    }
     let (head, body) = u.strip_prefix("data:")?.split_once(',')?;
     let mut parts = head.split(';');
     let mime = parts.next()?.trim().to_ascii_lowercase();
     let bytes = if parts.any(|p| p.eq_ignore_ascii_case("base64")) { base64(body)? } else { percent(body) };
+    if bytes.len() as u64 > MAX_BYTES {
+        return None;
+    }
     match mime.as_str() {
         "image/svg+xml" => Some(Data::Svg(bytes)),
         m if RASTER.contains(&m) => Some(Data::Raster(bytes)),

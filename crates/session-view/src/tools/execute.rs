@@ -185,7 +185,8 @@ fn call_row<S: TimelineHost>(s: &S, p: &Pal, cx: Ctx, id: &str, n: usize, call: 
     if let Some(c) = call {
         let name = c["tool"].as_str().unwrap_or("");
         let running = c["status"] == "running";
-        let name_font = if flat { UI.tracking(-0.04) } else { TOOL_CODE };
+        // Flat names inherit `--line-height-base` (20 px) from `execute-tool-calls` (`message-part.css:352,485-490`).
+        let name_font = if flat { UI.lh(20.0) } else { TOOL_CODE };
         let shown = if running && cx.live {
             crate::working::shimmer(s, p, name, name_font, 0.0)
         } else {
@@ -274,7 +275,7 @@ pub(crate) fn output_row<S: TimelineHost>(s: &S, p: &Pal, session: &str, id: &st
     if !flat {
         line = line.child(el().w(14.0).center().child(chevron(p, open)));
     }
-    let name_font = if flat { UI.tracking(-0.04) } else { TOOL_CODE };
+    let name_font = if flat { UI.lh(20.0) } else { TOOL_CODE };
     let name_color = if flat { p.muted } else { p.text };
     line = line
         .child(text(opencode_i18n::t!("ui.tool.execute.output")).key("name").font(name_font).color(name_color))

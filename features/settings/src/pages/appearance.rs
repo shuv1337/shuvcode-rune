@@ -15,16 +15,18 @@ use crate::host::SettingsHost;
 use crate::types::{CODE_FONTS, ReduceMotion, Scheme, TERMINAL_FONTS, TextRenderer, UI_FONTS, ZOOM_LEVELS};
 use crate::{Settings, list, setting, setting_with};
 
-/// Desktop's defaults, shown as each field's placeholder (`sansDefault`, `monoDefault`, `terminalDefault`).
+/// Desktop's defaults, shown as each field's placeholder (`sansDefault`, `monoDefault`,
+/// `terminalDefault`, `packages/app/src/settings/model.tsx:41-45`, `opencode#64797`).
 const UI_DEFAULT: &str = "Inter";
-const CODE_DEFAULT: &str = "IBM Plex Mono";
-const TERMINAL_DEFAULT: &str = "JetBrainsMono Nerd Font Mono";
+const CODE_DEFAULT: &str = "OpenMono";
+const TERMINAL_DEFAULT: &str = "OpenMono";
+const TERMINAL_FALLBACK: &str = "OpenMono, OpenMono Icons";
 
 fn terminal_preview_family(st: &Settings) -> Family {
     let custom = st.terminal_font_name.trim();
     if !custom.is_empty() {
         static INTERNED: OnceLock<Mutex<HashMap<String, &'static str>>> = OnceLock::new();
-        let list = format!("{}, {TERMINAL_DEFAULT}", crate::css_family(custom));
+        let list = format!("{}, {TERMINAL_FALLBACK}", crate::css_family(custom));
         let map = INTERNED.get_or_init(|| Mutex::new(HashMap::new()));
         if let Ok(mut guard) = map.lock() {
             if let Some(&cached) = guard.get(&list) {
@@ -36,13 +38,13 @@ fn terminal_preview_family(st: &Settings) -> Family {
                 return Family::Named(leaked);
             }
         }
-        return Family::Named(TERMINAL_DEFAULT);
+        return Family::Named(TERMINAL_FALLBACK);
     }
     match st.terminal_font {
-        0 => Family::Named("CommitMono, JetBrainsMono Nerd Font Mono"),
-        1 => Family::Named("IBM Plex Mono, JetBrainsMono Nerd Font Mono"),
+        0 => Family::Named("CommitMono, OpenMono, OpenMono Icons"),
+        1 => Family::Named("IBM Plex Mono, OpenMono, OpenMono Icons"),
         2 => Family::SystemMono,
-        _ => Family::Named(TERMINAL_DEFAULT),
+        _ => Family::Named(TERMINAL_FALLBACK),
     }
 }
 

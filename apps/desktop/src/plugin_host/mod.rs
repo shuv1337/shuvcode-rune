@@ -645,7 +645,19 @@ impl opencode_kernel::Feature<App> for PluginHostFeature {
                 })
                 .above("plugin.popover"),
         );
-        builder.add_rest("plugin_host.rest", |s, _| {
+        builder.add_rest("plugin_host.rest", |s, keep| {
+            s.plugins.shared.images.borrow_mut().rest();
+            s.plugins.last_usage.borrow_mut().retain(|id, _| keep(id));
+            s.plugins.panel_listed.borrow_mut().retain(|(_, _, sid), _| sid.is_empty() || keep(sid));
+            for p in s.plugins.list.iter() {
+                p.half.resources.borrow_mut().retain(|key, _| {
+                    let path = key.split_once('\n').map_or(key.as_str(), |(_, p)| p);
+                    match path.strip_prefix("/api/session/").and_then(|r| r.split(['/', '?']).next()) {
+                        Some(sid) if !sid.is_empty() && !matches!(sid, "active" | "status") => keep(sid),
+                        _ => true,
+                    }
+                });
+            }
             if s.tabs.is_empty() && matches!(&*s.route, crate::Route::Home) {
                 dormant::sleep_unused(s);
             }

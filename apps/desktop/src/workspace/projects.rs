@@ -130,7 +130,7 @@ impl ProjectsHost for App {
 
     fn current_route(&self) -> KitRoute {
         match &*self.route {
-            Route::Home => KitRoute::Home,
+            Route::Home | Route::Automations => KitRoute::Home,
             Route::Draft(id) => KitRoute::Draft(id.clone()),
             Route::Session { server, id } => KitRoute::Session { server: server.clone(), session_id: id.clone() },
         }
@@ -362,6 +362,10 @@ impl ProjectsHost for App {
         crate::servers::runtime::switch(self, server);
         *self.default_dir = dir;
         self.open_draft_tab();
+    }
+
+    fn session_location_picked(&mut self, attempt: rune::machine::Attempt, directory: Option<String>, tx: &mut Tx) {
+        crate::location_missing::picker_settled(self, attempt, directory, tx);
     }
 
     fn open_session(&mut self, server: &ServerKey, id: &str, tx: &mut Tx) {

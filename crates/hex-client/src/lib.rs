@@ -114,7 +114,7 @@ impl Hex {
 
     /// One request; a reply Hex refused comes back as its code.
     fn call(&self, path: &str, owner: Option<&str>, body: Option<Value>, wait: Duration) -> Result<Value, String> {
-        let agent: ureq::Agent = ureq::Agent::config_builder().timeout_global(Some(wait)).http_status_as_error(false).build().into();
+        let agent: ureq::Agent = net_trust::agent_config_for(&self.base).timeout_global(Some(wait)).http_status_as_error(false).build().into();
         let mut req = agent.post(format!("{}{path}", self.base)).header("Authorization", &format!("Bearer {}", self.token)).header("Content-Type", "application/json");
         if let Some(o) = owner {
             req = req.header("x-hex-dictation-token", o);
@@ -130,7 +130,7 @@ impl Hex {
 
     /// What this Hex offers; None when it doesn't answer (it quit, or it's too old to say).
     pub fn capabilities(&self) -> Option<Capabilities> {
-        let agent: ureq::Agent = ureq::Agent::config_builder().timeout_global(Some(Duration::from_secs(5))).http_status_as_error(false).build().into();
+        let agent: ureq::Agent = net_trust::agent_config_for(&self.base).timeout_global(Some(Duration::from_secs(5))).http_status_as_error(false).build().into();
         let mut resp = agent.get(format!("{}/capabilities", self.base)).header("Authorization", &format!("Bearer {}", self.token)).call().ok()?;
         if resp.status().as_u16() >= 400 {
             return None;
@@ -167,12 +167,12 @@ impl Hex {
     /// Transcribes a kept recording with the first model Hex has ready.
     pub fn transcribe(&self, wav: &Path) -> Result<String, String> {
         let bytes = whole(std::fs::read(wav).map_err(|_| "the recording is gone".to_owned())?);
-        let agent: ureq::Agent = ureq::Agent::config_builder().timeout_global(Some(Duration::from_secs(10))).http_status_as_error(false).build().into();
+        let agent: ureq::Agent = net_trust::agent_config_for(&self.base).timeout_global(Some(Duration::from_secs(10))).http_status_as_error(false).build().into();
         let mut resp = agent.get(format!("{}/models", self.base)).header("Authorization", &format!("Bearer {}", self.token)).call().map_err(|_| NOT_RUNNING.to_owned())?;
         let models: Value = serde_json::from_str(&resp.body_mut().read_to_string().unwrap_or_default()).unwrap_or(Value::Null);
         let ready: Vec<&str> = models.as_array().into_iter().flatten().filter(|m| m["installed"] == true && m["verified"] == true).filter_map(|m| m["id"].as_str()).collect();
         let model = ready.iter().find(|id| id.contains("parakeet")).or(ready.first()).ok_or("Hex has no model ready")?;
-        let agent: ureq::Agent = ureq::Agent::config_builder().timeout_global(Some(Duration::from_secs(130))).http_status_as_error(false).build().into();
+        let agent: ureq::Agent = net_trust::agent_config_for(&self.base).timeout_global(Some(Duration::from_secs(130))).http_status_as_error(false).build().into();
         let mut resp = agent
             .post(format!("{}/transcriptions?model={model}", self.base))
             .header("Authorization", &format!("Bearer {}", self.token))
@@ -201,7 +201,7 @@ impl Hex {
     /// `tentative`, which may), until the capture ends. Hex sends them while its model streams
     /// (on a GPU); `finish` has the transcript either way. Read them on their own thread.
     pub fn partials(&self, c: &Capture) -> Result<impl Iterator<Item = (String, String)> + Send + 'static, String> {
-        let agent: ureq::Agent = ureq::Agent::config_builder().timeout_connect(Some(Duration::from_secs(5))).http_status_as_error(false).build().into();
+        let agent: ureq::Agent = net_trust::agent_config_for(&self.base).timeout_connect(Some(Duration::from_secs(5))).http_status_as_error(false).build().into();
         let resp = agent
             .get(format!("{}/dictations/{}/partials", self.base, c.id))
             .header("Authorization", &format!("Bearer {}", self.token))

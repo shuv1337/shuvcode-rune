@@ -76,6 +76,13 @@ pub fn inbox_payload(id: &str) -> Option<Value> {
     inbox_payload_store().lock().unwrap_or_else(std::sync::PoisonError::into_inner).get(id).cloned()
 }
 
+pub(crate) fn retain_inbox_payloads(keep: &dyn Fn(&str) -> bool) -> bool {
+    let mut store = inbox_payload_store().lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let before = store.len();
+    store.retain(|id, _| keep(id));
+    store.len() != before
+}
+
 /// What [`Inbox::apply`] did.
 #[derive(Debug, PartialEq)]
 pub enum InboxChange {

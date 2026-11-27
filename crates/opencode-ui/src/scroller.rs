@@ -59,14 +59,25 @@ thread_local! {
 
 /// The device pixels to a point of the view being built (its `Env::scale`), set once per view:
 /// [`native_bar`]'s thumb lands on whole ones, as Chromium places a native thumb.
+/// Last scale written by `set_device_scale` on any UI thread, so background page workers
+/// (`prepare_images`) decode thumbnails at the real display scale instead of falling back to 1.0.
+static LAST_SCALE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
 pub fn set_device_scale(scale: f32) {
     SCALE.set(scale);
+    if scale.is_finite() && scale > 0.0 {
+        LAST_SCALE.store(scale.to_bits(), std::sync::atomic::Ordering::Relaxed);
+    }
 }
 
 /// The device pixels to a point of the view being built, 1 before [`set_device_scale`].
 pub fn device_scale() -> f32 {
     let s = SCALE.get();
-    if s > 0.0 { s } else { 1.0 }
+    if s > 0.0 {
+        return s;
+    }
+    let last = f32::from_bits(LAST_SCALE.load(std::sync::atomic::Ordering::Relaxed));
+    if last > 0.0 { last } else { 1.0 }
 }
 
 /// The points a `w` pt CSS border takes at the view's scale: Chromium lays it out on whole

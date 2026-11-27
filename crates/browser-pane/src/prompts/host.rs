@@ -298,7 +298,18 @@ impl crate::BrowserHost {
         for (tab_id, id) in expired {
             self.send(HostMsg::AnswerPermission { tab_id, id, allow: false, dismiss: true, persist: false });
         }
-        let next = self.tabs.iter().filter_map(|t| t.prompts.wake_at()).min();
+        for t in &mut self.tabs {
+            if let crate::scroll_cursor::ScrollCursorEffect::Apply(cursor) =
+                t.scroll_cursor.step(crate::scroll_cursor::ScrollCursorEvent::Tick { now })
+                && t.cursor != cursor
+            {
+                t.cursor = cursor;
+                changed = true;
+            }
+        }
+        let prompt_next = self.tabs.iter().filter_map(|t| t.prompts.wake_at()).min();
+        let cursor_next = self.tabs.iter().filter_map(|t| t.scroll_cursor.wake_at()).min();
+        let next = prompt_next.into_iter().chain(cursor_next).min();
         (changed, next)
     }
 
@@ -307,6 +318,7 @@ impl crate::BrowserHost {
     pub(crate) fn clear_prompts_on_disconnect(&mut self) {
         for t in &mut self.tabs {
             t.prompts.reset_for_engine();
+            t.scroll_cursor = Default::default();
         }
         self.context_menus.clear();
         self.popup_opens.clear();

@@ -1085,7 +1085,7 @@
   "settings.about.otherContributor.other": "{{count}} yang lain",
   "settings.about.tagline": "AI tidak boleh membina perisian yang hebat, tanpa anda",
   "settings.about.trademark": "OpenCode ialah tanda dagangan berdaftar Anomaly Innovations, Inc.",
-  "settings.about.typeset": "Set taip dalam Inter dan IBM Plex Mono",
+  "settings.about.typeset": "Set taip dalam Inter dan OpenMono",
   "settings.about.version": "Versi {{version}}",
   "settings.about.website": "www.opencode.ai",
   "settings.about.writtenByNames": "Ditulis oleh {{names}}",

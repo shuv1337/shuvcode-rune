@@ -42,6 +42,16 @@ enum Kind {
     Other,
 }
 
+/// Oldest server message position `(time.created, id)` in `stubs`, matching server pagination
+/// order (`opencode_kit::model::parse_messages`).
+pub(crate) fn oldest_position(stubs: &[Stub]) -> Option<(i64, String)> {
+    stubs
+        .iter()
+        .filter(|s| !s.id.is_empty())
+        .min_by(|a, b| (a.created, a.id.as_str()).cmp(&(b.created, b.id.as_str())))
+        .map(|s| (s.created, s.id.clone()))
+}
+
 /// A page's messages as stubs, in the page's order.
 pub fn stubs(page: &Value) -> Vec<Stub> {
     page["data"].as_array().into_iter().flatten().map(|m| Stub {
@@ -164,6 +174,16 @@ fn first_read(stubs: &[Stub], before: &[usize], first: usize) -> usize {
 pub struct Windows {
     map: HashMap<(String, String), Window>,
     reader: Reader,
+}
+
+impl Windows {
+    pub fn retain(&mut self, server: &str, keep: &dyn Fn(&str) -> bool) {
+        self.map.retain(|(s, id), _| s != server || keep(id));
+    }
+
+    pub fn forget(&mut self, server: &str, id: &str) {
+        self.map.remove(&(server.to_owned(), id.to_owned()));
+    }
 }
 
 /// Where the open timeline's reader stands, so each approach of its top counts once.

@@ -60,7 +60,7 @@ fn now_ms() -> i64 {
 
 fn post_pty(info: &Info, path: &str, timeout: Duration) -> Result<Value, String> {
     let base = normalize_origin(&info.url).unwrap_or_else(|| info.url.trim_end_matches('/').to_owned());
-    let agent: ureq::Agent = ureq::Agent::config_builder()
+    let agent: ureq::Agent = net_trust::agent_config_for(&base)
         .timeout_global(Some(timeout))
         .http_status_as_error(true)
         .max_redirects(0)

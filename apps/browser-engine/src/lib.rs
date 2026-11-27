@@ -75,19 +75,22 @@ const MAX_PUMP_DELAY: Duration = Duration::from_secs(1);
 /// page's work (cefclient pumps every 33 ms for that reason, always), and with only the 1 s cap
 /// a new tab's first frame came 1.3-2.4 s after it opened instead of ~0.4 s.
 #[cfg(not(target_os = "macos"))]
-const BUSY_PUMP_DELAY: Duration = Duration::from_millis(33);
+const BUSY_PUMP_DELAY: Duration = Duration::from_millis(16);
 #[cfg(not(target_os = "macos"))]
 const BUSY_FOR: Duration = Duration::from_secs(3);
-/// macOS also pumps the AppKit run loop between CEF's work calls, every 4 ms as before.
+/// macOS pumps the AppKit run loop every 4 ms while a tab is awake, relaxing to 50 ms when idle
+/// (0 tabs or all tabs hidden) to avoid 250 Hz idle wakeups.
 #[cfg(target_os = "macos")]
 const MAX_PUMP_DELAY: Duration = Duration::from_millis(4);
+#[cfg(target_os = "macos")]
+const IDLE_PUMP_DELAY: Duration = Duration::from_millis(50);
 #[cfg(target_os = "macos")]
 const BUSY_PUMP_DELAY: Duration = MAX_PUMP_DELAY;
 #[cfg(target_os = "macos")]
 const BUSY_FOR: Duration = Duration::ZERO;
 /// Windows: while a tab waits for the app to free a frame texture, how often it looks (Linux
 /// repaints when the app's read arrives).
-const FRAME_RETRY: Duration = Duration::from_millis(4);
+const FRAME_RETRY: Duration = Duration::from_millis(2);
 
 /// What wakes the main thread.
 pub enum Event {
@@ -208,6 +211,8 @@ pub fn run_browser(
 
     #[cfg(windows)]
     end_children_with_engine();
+    #[cfg(windows)]
+    let mut high_res_timer = HighResTimer::new();
     let ext_specs: Vec<String> = args
         .windows(2)
         .filter(|w| w[0] == "--extension")
@@ -456,7 +461,17 @@ pub fn run_browser(
                     true
                 }
                 Event::Host(msg) => {
-                    busy_until = Instant::now() + BUSY_FOR;
+                    let now = Instant::now();
+                    busy_until = now + BUSY_FOR;
+                    if matches!(
+                        msg.as_ref(),
+                        HostMsg::Wheel { .. }
+                            | HostMsg::MouseMove { .. }
+                            | HostMsg::MouseButton { .. }
+                            | HostMsg::Key { .. }
+                    ) {
+                        pump_at = Some(now);
+                    }
                     if std::mem::take(&mut first_message) {
                         step("first_message");
                     }
@@ -510,7 +525,15 @@ pub fn run_browser(
             pump_at = Some(Instant::now());
         }
         let now = Instant::now();
-        let cap = if now < busy_until { BUSY_PUMP_DELAY } else { MAX_PUMP_DELAY };
+        #[cfg(target_os = "macos")]
+        let max_pump = if !manager.has_awake_tabs() {
+            IDLE_PUMP_DELAY
+        } else {
+            MAX_PUMP_DELAY
+        };
+        #[cfg(not(target_os = "macos"))]
+        let max_pump = MAX_PUMP_DELAY;
+        let cap = if now < busy_until { BUSY_PUMP_DELAY } else { max_pump };
         if pump_at.is_some_and(|at| at <= now) || now.saturating_duration_since(last_pump) >= cap {
             pump_at = None;
             last_pump = now;
@@ -552,7 +575,13 @@ pub fn run_browser(
             .into_iter()
             .flatten()
             .min()
-            .unwrap_or(now + MAX_PUMP_DELAY);
+            .unwrap_or(now + max_pump);
+        #[cfg(windows)]
+        high_res_timer.sync(
+            now < busy_until
+                || manager.waits_for_texture()
+                || pump_at.is_some_and(|at| at.saturating_duration_since(now) < Duration::from_millis(50)),
+        );
         let event = match rx.recv_timeout(wake.saturating_duration_since(now)) {
             Ok(event) => event,
             Err(RecvTimeoutError::Timeout) => {
@@ -703,6 +732,98 @@ fn default_socket_path() -> PathBuf {
     PathBuf::from(home)
         .join("Library/Caches/co.anomaly.opencode")
         .join(format!("browser-{uid}.sock"))
+}
+
+/// Explicit state machine scoping Windows' 1 ms timer period (`timeBeginPeriod(1)`) to active
+/// interaction, frame retries, and short pump intervals so idle tabs / laptops do not burn 1 kHz
+/// timer interrupts. On startup it opts this windowless sidecar out of Windows 11's
+/// `PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION` so active 1 ms requests are honored.
+#[cfg(windows)]
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+enum HighResTimerState {
+    #[default]
+    Inactive,
+    Active,
+}
+
+#[cfg(windows)]
+enum HighResTimerEffect {
+    Begin,
+    End,
+}
+
+#[cfg(windows)]
+impl HighResTimerState {
+    fn step(&mut self, want_active: bool) -> Option<HighResTimerEffect> {
+        match (*self, want_active) {
+            (Self::Inactive, true) => {
+                *self = Self::Active;
+                Some(HighResTimerEffect::Begin)
+            }
+            (Self::Active, false) => {
+                *self = Self::Inactive;
+                Some(HighResTimerEffect::End)
+            }
+            _ => None,
+        }
+    }
+}
+
+#[cfg(windows)]
+#[allow(unsafe_code)]
+struct HighResTimer(HighResTimerState);
+
+#[cfg(windows)]
+#[allow(unsafe_code)]
+impl HighResTimer {
+    fn new() -> Self {
+        use windows::Win32::System::Threading::{
+            GetCurrentProcess, PROCESS_POWER_THROTTLING_CURRENT_VERSION,
+            PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION, PROCESS_POWER_THROTTLING_STATE,
+            ProcessPowerThrottling, SetProcessInformation,
+        };
+        let state = PROCESS_POWER_THROTTLING_STATE {
+            Version: PROCESS_POWER_THROTTLING_CURRENT_VERSION,
+            ControlMask: PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION,
+            StateMask: 0,
+        };
+        // SAFETY: plain Win32 call on this process handle and an owned `state` struct.
+        unsafe {
+            let _ = SetProcessInformation(
+                GetCurrentProcess(),
+                ProcessPowerThrottling,
+                (&raw const state).cast(),
+                std::mem::size_of::<PROCESS_POWER_THROTTLING_STATE>() as u32,
+            );
+        }
+        Self(HighResTimerState::Inactive)
+    }
+
+    fn sync(&mut self, want_active: bool) {
+        match self.0.step(want_active) {
+            Some(HighResTimerEffect::Begin) => {
+                // SAFETY: paired with `timeEndPeriod(1)` on transition to `Inactive` or `Drop`.
+                if unsafe { windows::Win32::Media::timeBeginPeriod(1) } != 0 {
+                    self.0 = HighResTimerState::Inactive;
+                }
+            }
+            Some(HighResTimerEffect::End) => {
+                // SAFETY: paired with the prior `timeBeginPeriod(1)` that entered `Active`.
+                unsafe {
+                    let _ = windows::Win32::Media::timeEndPeriod(1);
+                }
+            }
+            None => {}
+        }
+    }
+}
+
+#[cfg(windows)]
+#[allow(unsafe_code)]
+impl Drop for HighResTimer {
+    fn drop(&mut self) {
+        self.sync(false);
+    }
 }
 
 /// The app always passes `--socket`; this is for running the engine by hand.

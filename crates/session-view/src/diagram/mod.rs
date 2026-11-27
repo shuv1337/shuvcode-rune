@@ -88,6 +88,7 @@ thread_local! {
 /// Called at the top of each view, before the timeline builds.
 pub fn prepare<S: TimelineHost>(s: &S) {
     SHOWN.set(s.diagrams().open.as_ref().map(|o| o.id));
+    s.media_store().begin_frame();
 }
 
 fn id_of(source: &str) -> u64 {
@@ -105,6 +106,12 @@ impl Diagrams {
     /// hides and comes back.
     pub fn hidden_in(&self, body: &str) -> Option<u64> {
         self.open.as_ref().filter(|o| body.contains(&*o.seen.source)).map(|o| o.id)
+    }
+
+    /// Releases cached diagram snapshots; visible cards re-register on the next view pass.
+    pub fn rest(&mut self) {
+        let open_id = self.open.as_ref().map(|o| o.id);
+        self.seen.retain(|id, _| open_id == Some(*id));
     }
 }
 

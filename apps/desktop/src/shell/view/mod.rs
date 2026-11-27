@@ -195,7 +195,7 @@ fn shell(s: &App, cx: &mut Cx<App>) -> El {
     } else {
         0.0
     };
-    let need_panel_sz = (!s.settings_open() && matches!(*s.route, Route::Draft(_) | Route::Home)) || s.composer_ext.attach.drop.present();
+    let need_panel_sz = (!s.settings_open() && matches!(*s.route, Route::Draft(_) | Route::Home | Route::Automations)) || s.composer_ext.attach.drop.present();
     let panel_sz = if need_panel_sz {
         cx.layout_size("panel").map_or((0.0, 0.0), |[w, h]| (w, h))
     } else {
@@ -265,6 +265,7 @@ fn shell(s: &App, cx: &mut Cx<App>) -> El {
         .on_drop_hover(crate::dropzone::hover)
         .child(if s.settings_open() { crate::settings::page(s, p, settings_sz) } else { match &*s.route {
             Route::Home => home(s, p, [panel_sz.0, panel_sz.1], cx.layout_size("zoom").unwrap_or([0.0, 0.0])),
+            Route::Automations => crate::automations::view::page(s, p, [panel_sz.0, panel_sz.1]),
             Route::Session { id, .. } => session_page(s, p, id),
             Route::Draft(_) => draft_page(s, p, panel_sz.0),
         } })

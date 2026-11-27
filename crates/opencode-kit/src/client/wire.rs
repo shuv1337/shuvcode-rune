@@ -35,7 +35,7 @@ pub enum Incoming {
     /// A read or write that failed, as the client knows it: the call and what answered, typed.
     /// The UI builds what it says from this, never from text.
     Failed(WireError),
-    /// A prompt write (`Write::Send`, `SendMovingHome`, `SendFromRevert`, `StartAs`) that failed,
+    /// A prompt write (`Write::Send`, `SendFromRevert`, `StartAs`) that failed,
     /// with the id the prompt was sent under and its error.
     SendFailed { session: String, id: String, error: WireError },
     /// A rename, delete, archive or restore this window sent (`client.session.write`'s `data`),
@@ -154,9 +154,7 @@ pub enum Write {
     Create { directory: String, text: String },
     /// `Prompt` with its client id and files.
     Send { session: String, prompt: Prompt },
-    /// `Send` that moves a session whose folder is gone to its project's main checkout first
-    /// (`Server::send_moving_home`).
-    SendMovingHome { session: String, prompt: Prompt },
+
     /// `Create` with a full first prompt.
     Start { directory: String, prompt: Prompt },
     /// `Start` under an id the app chose (`session_id`), so it can show the session before the
@@ -231,7 +229,7 @@ impl Write {
         match self {
             Self::Prompt { session, .. } | Self::Permission { session, .. }
             | Self::Form { session, .. } | Self::CancelForm { session, .. }
-            | Self::Send { session, .. } | Self::SendMovingHome { session, .. }
+            | Self::Send { session, .. }
             | Self::StartAs { session, .. } | Self::Cancel { session, .. }
             | Self::Deliver { session, .. } | Self::Shell { session, .. }
             | Self::Rename { session, .. } | Self::View { session, .. }

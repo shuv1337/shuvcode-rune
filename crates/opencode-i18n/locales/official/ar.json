@@ -1165,7 +1165,7 @@
   "settings.about.otherContributor.zero": "{{count}} مساهمين آخرين",
   "settings.about.tagline": "لا يستطيع الذكاء الاصطناعي بناء برمجيات رائعة من دونك",
   "settings.about.trademark": "⁨OpenCode⁩ علامة تجارية مسجلة لشركة ⁨Anomaly Innovations, Inc.⁩",
-  "settings.about.typeset": "منضّد بخطي ⁨Inter⁩ و⁨IBM Plex Mono⁩",
+  "settings.about.typeset": "منضّد بخطي ⁨Inter⁩ و⁨OpenMono⁩",
   "settings.about.version": "الإصدار ⁨{{version}}⁩",
   "settings.about.website": "⁨www.opencode.ai⁩",
   "settings.about.writtenByNames": "كتبه ⁨{{names}}⁩",

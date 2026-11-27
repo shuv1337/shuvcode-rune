@@ -35,7 +35,7 @@ pub fn parse(value: &str) -> Option<Link> {
 /// Trades the link's code for a session token. The code works once: a second try, or one after
 /// it expires, is refused.
 pub fn redeem(link: &Link) -> Result<String, String> {
-    let agent: ureq::Agent = ureq::Agent::config_builder().timeout_global(Some(Duration::from_secs(10))).http_status_as_error(false).build().into();
+    let agent: ureq::Agent = net_trust::agent_config().timeout_global(Some(Duration::from_secs(10))).http_status_as_error(false).build().into();
     let mut resp = agent
         .get(format!("{}/auth/connect/{}", link.server, link.code))
         .header("Accept", "application/json")

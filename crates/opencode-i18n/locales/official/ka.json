@@ -1085,7 +1085,7 @@
   "settings.about.otherContributor.other": "{{count}} სხვა",
   "settings.about.tagline": "AI ვერ შექმნის შესანიშნავ პროგრამულ უზრუნველყოფას თქვენ გარეშე",
   "settings.about.trademark": "OpenCode არის Anomaly Innovations, Inc.-ის რეგისტრირებული სავაჭრო ნიშანი.",
-  "settings.about.typeset": "აწყობილია Inter და IBM Plex Mono შრიფტებით",
+  "settings.about.typeset": "აწყობილია Inter და OpenMono შრიფტებით",
   "settings.about.version": "ვერსია {{version}}",
   "settings.about.website": "www.opencode.ai",
   "settings.about.writtenByNames": "ავტორი: {{names}}",

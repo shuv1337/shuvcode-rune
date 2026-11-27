@@ -252,13 +252,37 @@ fn actions(s: &App, p: &Pal, home: bool, new: impl Fn() -> El) -> Vec<El> {
         action_row(p, "sidebar-settings", &ic::SETTINGS_GEAR, t!("sidebar.settings"), crate::keymap::Bind::Settings.keycaps(), s.settings_open())
             .on_press_tx(|s: &mut App, tx| s.toggle_settings(tx))
     };
+    let automations_open = *s.route == Route::Automations && !s.settings_open();
+    let automations = || {
+        let count = crate::automations::active_count(s);
+        let mut r = action_row(p, "vertical-tabs-automations", &crate::automations::CLOCK, t!("automations.title"), vec![], automations_open)
+            .matched(super::titlebar::NAV_AUTOMATIONS).matched_crop().motion(GLIDE)
+            .on_press_tx(|s: &mut App, tx: &mut Tx| crate::automations::toggle(s, tx));
+        if count > 0 {
+            let ink = if automations_open { p.text } else { p.faint };
+            r = r.child(spacer()).child(text(count.to_string()).key("automations-count").font(TextStyle::new(12.0, 440.0).lh(16.0).features("\"tnum\"")).color(ink).group_color(p.text));
+        }
+        r
+    };
+    let show_auto = crate::automations::available(s);
+    let mut out = Vec::with_capacity(4);
     if s.settings.navigation_prototype() {
-        vec![new(), home_row(), settings()]
+        out.push(new());
+        out.push(home_row());
+        if show_auto { out.push(automations()); }
+        out.push(settings());
     } else if s.project_navigation() {
-        vec![new(), search(), settings()]
+        out.push(new());
+        out.push(search());
+        if show_auto { out.push(automations()); }
+        out.push(settings());
     } else {
-        vec![home_row(), search(), new()]
+        out.push(home_row());
+        out.push(search());
+        if show_auto { out.push(automations()); }
+        out.push(new());
     }
+    out
 }
 
 /// The sidebar's list: the side tabs, or the inbox.

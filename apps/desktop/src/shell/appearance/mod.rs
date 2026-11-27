@@ -39,13 +39,13 @@ impl Motion {
 }
 
 /// The weights the bundled mono faces answer, as Desktop's `@font-face` rules declare them
-/// (`packages/app/src/index.css:42-57`): Plex Mono's Text cut every weight below 600, its Bold cut
-/// the rest. Without them inline code, which Desktop sets at the medium weight 530
-/// (`session-ui/src/components/markdown.css:431-441`), matched the Bold cut. Commit Mono, which
-/// Desktop doesn't bundle, splits its Regular and Bold cuts the same way.
+/// (`packages/app/src/index.css`, `opencode#64797`): OpenMono Regular answers every weight below
+/// 600 and OpenMono Bold answers 600 and up. Without them inline code, which Desktop sets at the
+/// medium weight 530 (`session-ui/src/components/markdown.css:431-441`), matched the Bold cut.
+/// Commit Mono, which Desktop doesn't bundle, splits its Regular and Bold cuts the same way.
 pub const FACE_WEIGHTS: &[rune::text::FaceWeights] = &[
-    rune::text::FaceWeights { family: "IBM Plex Mono", weight: 450.0, range: (100.0, 599.0) },
-    rune::text::FaceWeights { family: "IBM Plex Mono", weight: 700.0, range: (600.0, 900.0) },
+    rune::text::FaceWeights { family: "OpenMono", weight: 400.0, range: (100.0, 599.0) },
+    rune::text::FaceWeights { family: "OpenMono", weight: 700.0, range: (600.0, 900.0) },
     rune::text::FaceWeights { family: "CommitMono", weight: 400.0, range: (100.0, 599.0) },
     rune::text::FaceWeights { family: "CommitMono", weight: 700.0, range: (600.0, 900.0) },
 ];

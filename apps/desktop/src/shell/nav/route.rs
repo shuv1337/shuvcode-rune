@@ -26,6 +26,8 @@ impl crate::App {
 pub enum Route {
     #[default]
     Home,
+    /// Experimental Automations screen (`/automations`, opencode#66393).
+    Automations,
     /// Session `id` on `server`. The window works against `server` while it shows it
     /// (`servers::runtime`'s checkout).
     Session { server: ServerKey, id: String },
@@ -53,7 +55,7 @@ impl Route {
     pub fn server(&self) -> Option<&ServerKey> {
         match self {
             Route::Session { server, .. } => Some(server),
-            Route::Home | Route::Draft(_) => None,
+            Route::Home | Route::Automations | Route::Draft(_) => None,
         }
     }
 }

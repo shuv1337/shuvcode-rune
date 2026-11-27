@@ -1105,7 +1105,7 @@
   "settings.about.otherContributor.other": "{{count}} altres",
   "settings.about.tagline": "La IA no pot crear un gran programari sense tu",
   "settings.about.trademark": "OpenCode és una marca registrada de Anomaly Innovations, Inc.",
-  "settings.about.typeset": "Tipografia en Inter i IBM Plex Mono",
+  "settings.about.typeset": "Tipografia en Inter i OpenMono",
   "settings.about.version": "Versió {{version}}",
   "settings.about.website": "www.opencode.ai",
   "settings.about.writtenByNames": "Escrit per {{names}}",

@@ -33,6 +33,12 @@ impl Server {
         self.write("POST", &format!("/api/experimental/session/{session}/wait"), None).map(|_| ())
     }
 
+    /// Moves `session` to `directory` (`POST /api/session/:id/move`), waiting up to 30 s
+    /// (Desktop's `WORKSPACE_MOVE_TIMEOUT_MS`).
+    pub fn move_session(&self, session: &str, directory: &str) -> Result<(), WireError> {
+        self.write_within("POST", &format!("/api/session/{session}/move"), Some(serde_json::json!({ "directory": directory })), std::time::Duration::from_secs(30)).map(|_| ())
+    }
+
     /// Stages a revert at `message` (`POST /api/session/:id/revert/stage`).
     pub fn revert_stage(&self, session: &str, message: &str) -> Result<Value, WireError> {
         self.write("POST", &format!("/api/session/{session}/revert/stage"), Some(serde_json::json!({ "messageID": message })))

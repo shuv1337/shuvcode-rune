@@ -1085,7 +1085,7 @@
   "settings.about.otherContributor.other": "өөр {{count}}",
   "settings.about.tagline": "Тангүйгээр AI гайхалтай програм хангамж бүтээж чадахгүй",
   "settings.about.trademark": "OpenCode нь Anomaly Innovations, Inc.-ийн бүртгэлтэй барааны тэмдэг юм.",
-  "settings.about.typeset": "Inter болон IBM Plex Mono үсгийн хэвээр өрсөн",
+  "settings.about.typeset": "Inter болон OpenMono үсгийн хэвээр өрсөн",
   "settings.about.version": "Хувилбар {{version}}",
   "settings.about.website": "www.opencode.ai",
   "settings.about.writtenByNames": "Бичсэн: {{names}}",

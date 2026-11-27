@@ -11,7 +11,7 @@ const SYMBOL: TextStyle = TextStyle::new(17.0, 440.0).mono().lh(20.0);
 pub(super) fn mounted(s: &App) -> bool {
     if !session_view::style::touch_controls() || s.settings_open() || s.fixture_run.stage.is_some() { return false; }
     match &*s.route {
-        Route::Home => false,
+        Route::Home | Route::Automations => false,
         Route::Draft(_) => true,
         Route::Session { id, .. } => (!s.narrow() || s.narrow_view() == crate::narrow::machine::CONVERSATION)
             && crate::session_state::view(s, id) == crate::session_state::View::Session

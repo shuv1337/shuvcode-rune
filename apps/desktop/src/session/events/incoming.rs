@@ -36,6 +36,7 @@ pub(crate) fn poll(s: &mut App, tx: &mut Tx) -> bool {
                 // A session deleted while its tab is open: the tab says it's gone (`session_state`).
                 let gone = e.ty == "session.deleted" && e.data["sessionID"].as_str().is_some_and(|id| s.route == Route::here(id.to_owned()));
                 if e.ty == "session.deleted" && let Some(id) = e.data["sessionID"].as_str() {
+                    s.close_browser_tabs_for_session(id);
                     crate::session_menu::unread::set(s, &crate::servers::runtime::current(), id, false);
                     crate::session_menu::preferences::forget(s, &crate::servers::runtime::current(), id);
                     crate::pickers::saved::forget(s, id);
@@ -59,6 +60,7 @@ fn message(s: &mut App, m: Incoming, tx: &mut Tx) -> bool {
             crate::connect::picker_reads::refresh(s);
             s.windows_forgotten();
             crate::session_state::reconnected(s, tx);
+            crate::location_missing::reconnected(s, tx);
             let active_server = crate::servers::runtime::active(s).clone();
             s.sidebar_inbox.branches.reconnected(&active_server);
             reconnect::back(s);

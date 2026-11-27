@@ -69,7 +69,9 @@ fn about_other_contributors(s: &App) -> u32 {
         ABOUT_ASKED.call_once(|| {
             let waker = (*s.waker).clone();
             rune::task::spawn("about-contributors", move || {
-                let link = ureq::get("https://api.github.com/repos/anomalyco/opencode/contributors?anon=1&per_page=1")
+                let agent: ureq::Agent = net_trust::agent_config().build().into();
+                let link = agent
+                    .get("https://api.github.com/repos/anomalyco/opencode/contributors?anon=1&per_page=1")
                     .header("Accept", "application/vnd.github+json")
                     .header("X-GitHub-Api-Version", "2022-11-28")
                     .call()

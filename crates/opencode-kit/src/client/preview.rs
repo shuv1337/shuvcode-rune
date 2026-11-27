@@ -316,7 +316,7 @@ fn filter_addrs(addrs: Vec<SocketAddr>, family: IpFamily) -> Result<ResolvedSock
 
 impl Server {
     fn preview_agent(&self, abort: &PreviewAbort) -> ureq::Agent {
-        let cfg = ureq::Agent::config_builder()
+        let cfg = net_trust::agent_config_for(&self.base)
             .http_status_as_error(false)
             .max_redirects(0)
             .max_idle_connections(0)

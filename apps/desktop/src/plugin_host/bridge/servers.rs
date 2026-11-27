@@ -329,7 +329,7 @@ pub fn cover(app: &App, p: &crate::palette::Pal) -> Option<rune::El> {
     let (server, tab) = match &*app.route {
         crate::Route::Session { server, id } => (server.clone(), format!("{}:{id}", server.as_str())),
         crate::Route::Draft(id) => (app.tabs.iter().find(|t| t.id == *id)?.server.clone(), id.clone()),
-        crate::Route::Home => return None,
+        crate::Route::Home | crate::Route::Automations => return None,
     };
     let c = all(app).into_iter().find(|c| !c.by_address() && c.key == server.as_str() && c.rec.state != ServerState::Ready)?;
     crate::plugin_host::surfaces::server_cover(app, p, &c.key, &c.rec, &tab)

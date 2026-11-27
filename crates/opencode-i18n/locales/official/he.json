@@ -1105,7 +1105,7 @@
   "settings.about.otherContributor.two": "עוד {{count}}",
   "settings.about.tagline": "בינה מלאכותית לא יכולה לבנות תוכנה מעולה בלעדיך",
   "settings.about.trademark": "⁨OpenCode⁩ הוא סימן מסחרי רשום של ⁨Anomaly Innovations, Inc.⁩",
-  "settings.about.typeset": "סודר בגופנים ⁨Inter⁩ ו-⁨IBM Plex Mono⁩",
+  "settings.about.typeset": "סודר בגופנים ⁨Inter⁩ ו-⁨OpenMono⁩",
   "settings.about.version": "גרסה ⁨{{version}}⁩",
   "settings.about.website": "⁨www.opencode.ai⁩",
   "settings.about.writtenByNames": "נכתב על ידי ⁨{{names}}⁩",

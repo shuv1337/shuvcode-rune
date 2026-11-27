@@ -165,11 +165,12 @@ impl App {
         }
         // Artifact links (`artifact://<id>/<path>` or same-server `/api/experimental/artifacts/<id>/view/...`)
         // open directly in an isolated preview tab when a session is active (built-in/user only).
-        if allow_artifacts
-            && let Some(sid) = sid
-            && self.try_open_artifact_link(sid, trimmed)
-        {
-            return;
+        if allow_artifacts && let Some(sid) = sid {
+            let was = crate::panels::panes_shown(self);
+            if self.try_open_artifact_link(sid, trimmed) {
+                crate::panels::state::finish_show_pane_tab(self, was, tx);
+                return;
+            }
         }
         let is_http = trimmed.get(..7).is_some_and(|s| s.eq_ignore_ascii_case("http://"))
             || trimmed.get(..8).is_some_and(|s| s.eq_ignore_ascii_case("https://"));
@@ -201,17 +202,21 @@ impl App {
                 && self.browser_links_enabled()
                 && !self.browser_unsupported_for_links();
             if open_in_pane {
-                #[cfg(not(target_arch = "wasm32"))]
-                if agent {
-                    self.open_new_agent_browser_tab_for_session(sid, trimmed, None, true);
-                } else {
-                    self.open_new_browser_tab_for_session(sid, trimmed, None, true);
-                }
-                #[cfg(target_arch = "wasm32")]
-                {
-                    let _ = agent;
-                    self.open_new_browser_tab_for_session(sid, trimmed, None, true);
-                }
+                // Land the tab switch immediately when the side region is already open;
+                // fly open on SIDE_SPRING when it was closed (matching files/review/terminal).
+                self.show_pane_tab(tx, |s| {
+                    #[cfg(not(target_arch = "wasm32"))]
+                    if agent {
+                        s.open_new_agent_browser_tab_for_session(sid, trimmed, None, true);
+                    } else {
+                        s.open_new_browser_tab_for_session(sid, trimmed, None, true);
+                    }
+                    #[cfg(target_arch = "wasm32")]
+                    {
+                        let _ = agent;
+                        s.open_new_browser_tab_for_session(sid, trimmed, None, true);
+                    }
+                });
             } else if !agent && self.live() {
                 if self.external_url_allowed_for_session(sid, trimmed) {
                     crate::open_in::open_external(tx, trimmed);

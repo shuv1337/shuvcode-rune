@@ -250,13 +250,7 @@ impl EngineManager {
                     }
                 }
                 ExtEffect::FocusTab { engine_tab_id } => {
-                    for (&id, t) in &self.tabs {
-                        let active = id == engine_tab_id;
-                        if !t.is_popup {
-                            t.host.was_hidden(i32::from(!active));
-                        }
-                        t.host.set_focus(i32::from(active));
-                    }
+                    self.handle_ext_focus_tab(engine_tab_id);
                     if let Some(ext) = &mut self.extensions {
                         ext.on_tab_focused(engine_tab_id);
                     }
@@ -271,6 +265,7 @@ impl EngineManager {
                         continue;
                     }
                     if let Some(tab) = self.tabs.remove(&engine_tab_id) {
+                        self.on_tab_closed_lifecycle(engine_tab_id);
                         self.permissions.on_tab_closed(engine_tab_id);
                         tab.menu.cancel_all();
                         tab.prompts.dismiss_all();
@@ -447,6 +442,7 @@ impl EngineManager {
             preview: None,
             agent_driven: false,
             document: 0,
+            audible: false,
         }));
         let allowed_ext = vec![ext_id.clone()];
         let file_roots = Arc::new(Mutex::new(Vec::new()));
@@ -457,6 +453,7 @@ impl EngineManager {
             self.mach_port.clone(),
             null_out.clone(),
             Arc::new(AtomicU64::new(0)),
+            Arc::new(AtomicBool::new(true)),
             #[cfg(windows)]
             None,
             #[cfg(target_os = "linux")]
@@ -883,6 +880,8 @@ impl EngineManager {
             | M::CancelExtensionOpenTab { .. }
             | M::ExtensionMetrics { .. }
             | M::SetColorScheme { .. }
+            | M::SetFrameRate { .. }
+            | M::SetVisibleTabs { .. }
             | M::SetPartitionProxy { .. }
             | M::DropContext { .. }
             | M::DmabufFailed { .. }
@@ -910,6 +909,7 @@ impl EngineManager {
             | M::Forward { .. }
             | M::CloseTab { .. }
             | M::FocusTab { .. }
+            | M::SetTabUnthrottled { .. }
             | M::Stop { .. }
             | M::StopFind { .. }
             | M::SetTabPolicy { .. }

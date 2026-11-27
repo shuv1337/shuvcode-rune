@@ -218,6 +218,8 @@ fn window(mut w: Window, frame: Option<Frame>, diagnostics: &crate::diagnostics:
     let ready = handle.clone();
     let mut motion_log = crate::motion_log::Log::default();
     let (encoded, drawn) = (diagnostics.clone(), diagnostics);
+    let display_hz = std::rc::Rc::new(std::cell::Cell::new(None::<f64>));
+    let display_hz_enc = display_hz.clone();
     // The first frame draws with the appearance the last run saw; the portal's answer follows.
     #[cfg(target_os = "linux")]
     rune::last_appearance(store::load_appearance(), store::save_appearance);
@@ -242,11 +244,13 @@ fn window(mut w: Window, frame: Option<Frame>, diagnostics: &crate::diagnostics:
             })
         })
         .on_frame_encoded(move |f| {
+            if let Some(hz) = f.refresh_hz() { display_hz_enc.set(Some(hz)); }
             encoded.encoded(f);
             crate::telemetry::encoded(f);
             crate::files::trace::frame(f);
         })
         .on_frame_drawn(move |rt| {
+            if let Some(hz) = display_hz.get() { rt.state.workspace_panes.browser.host.set_display_hz(hz); }
             drawn.drawn(rt);
             if let Some((sid, msgs)) = rt.state.painted_session()
                 && msgs > 0

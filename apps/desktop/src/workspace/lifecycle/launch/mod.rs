@@ -481,7 +481,14 @@ pub fn browser_waker(handle: rune::AppHandle<App>) -> rune::Waker {
             pending.store(false, Ordering::Release);
             crate::surfaces::browser::rpc::express::poll(s);
             let changed = s.poll_browser();
-            crate::surfaces::browser::rpc::poll(s, tx) | changed
+            let rpc_changed = crate::surfaces::browser::rpc::poll(s, tx);
+            if !changed
+                && !rpc_changed
+                && let Some(at) = s.workspace_panes.browser.host.scroll_cursor_wake_at()
+            {
+                tx.wake_after(at.saturating_duration_since(rune::time::Instant::now()));
+            }
+            changed | rpc_changed
         });
     })
 }

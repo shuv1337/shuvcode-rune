@@ -1125,7 +1125,7 @@
   "settings.about.otherContributor.other": "{{count}} другого",
   "settings.about.tagline": "AI не сможет создать отличное программное обеспечение без вас",
   "settings.about.trademark": "OpenCode является зарегистрированной торговой маркой Anomaly Innovations, Inc..",
-  "settings.about.typeset": "Набор в Inter и IBM Plex Mono",
+  "settings.about.typeset": "Набор в Inter и OpenMono",
   "settings.about.version": "Версия {{version}}",
   "settings.about.website": "www.opencode.ai",
   "settings.about.writtenByNames": "Автор: {{names}}",

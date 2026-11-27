@@ -293,7 +293,7 @@ impl PanelsHost for App {
     fn on_side_tab_closing(&mut self, session_id: &str, key: &str) {
         if let Some(path) = key.strip_prefix("file:").and_then(crate::files::data::file_tab_path) {
             if let Some(ws) = self.kernel.slots.get_mut(&crate::files::FILES).sessions.get_mut(session_id) {
-                ws.close_preview(&path);
+                ws.close_file(&path);
             }
             crate::files::watch::unwatch(self, session_id, &path);
         }

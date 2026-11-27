@@ -1085,7 +1085,7 @@
   "settings.about.otherContributor.other": "{{count}} diğerleri",
   "settings.about.tagline": "Yapay zeka siz olmadan mükemmel yazılım geliştiremez",
   "settings.about.trademark": "OpenCode, Anomaly Innovations, Inc.'in tescilli ticari markasıdır.",
-  "settings.about.typeset": "Inter ve IBM Plex Mono'da dizgi",
+  "settings.about.typeset": "Inter ve OpenMono'da dizgi",
   "settings.about.version": "Sürüm {{version}}",
   "settings.about.website": "www.opencode.ai",
   "settings.about.writtenByNames": "{{names}} tarafından yazıldı",

@@ -1085,7 +1085,7 @@
   "settings.about.otherContributor.other": "{{count}} onnur",
   "settings.about.tagline": "AI kann ikki byggja góða ritbúnað, uttan teg",
   "settings.about.trademark": "OpenCode er eitt skrásett vørumerki hjá Anomaly Innovations, Inc.",
-  "settings.about.typeset": "Skriftsett í Inter og IBM Plex Mono",
+  "settings.about.typeset": "Skriftsett í Inter og OpenMono",
   "settings.about.version": "Útgáva {{version}}",
   "settings.about.website": "www.opna koda.ai",
   "settings.about.writtenByNames": "Skrivað hevur {{names}}",

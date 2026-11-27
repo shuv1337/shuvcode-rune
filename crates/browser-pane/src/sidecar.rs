@@ -10,7 +10,7 @@ use crate::client::BrowserHost;
 use crate::installer::{self, EngineStatus, Fault};
 #[cfg(target_os = "macos")]
 use crate::mach_pipe::MachReceiver;
-use crate::machine::{EngineEffect, EngineEvent};
+use crate::machine::{ConnectOrigin, EngineEffect, EngineEvent};
 use crate::prefetch::Mode;
 use crate::profile;
 use crate::transport::{Link, UnixStream, spawn_and_attach, wire_stream};
@@ -57,11 +57,14 @@ impl BrowserHost {
     pub fn start_install(&mut self) {
         // One that stopped answering is ended: its pages open again in a new one.
         let end_hung = self.shared.lock().unwrap_or_else(PoisonError::into_inner).step(EngineEvent::EndHung);
-        if let EngineEffect::EndHung { kill_pid } = end_hung {
+        if let EngineEffect::EndHung { kill_pid, sock, outbox } = end_hung {
             if let Some(pid) = kill_pid {
                 crate::transport::kill_pid(pid);
             }
-            if let Ok(sock) = self.engine_socket() {
+            if let Some(tx) = outbox {
+                tx.send(crate::protocol::HostMsg::Shutdown).ok();
+            }
+            if let Some(sock) = sock.or_else(|| self.engine_socket().ok()) {
                 std::fs::remove_file(sock).ok();
             }
         }
@@ -101,8 +104,8 @@ impl BrowserHost {
                     // Hold `shared` across `remove_file` so a concurrent `open_tab` cannot observe
                     // the disconnected state and connect to the shutting-down engine's socket.
                     let mut shared = shared.lock().unwrap_or_else(PoisonError::into_inner);
-                    if let EngineEffect::Shutdown { outbox: Some(tx) } = shared.step(EngineEvent::Unprepare) {
-                        if let Some(sock) = sock {
+                    if let EngineEffect::Shutdown { outbox: Some(tx), sock: active_sock } = shared.step(EngineEvent::Unprepare) {
+                        if let Some(sock) = active_sock.or(sock) {
                             std::fs::remove_file(sock).ok();
                         }
                         rune::marks::mark("browser.engine.unprepared");
@@ -158,6 +161,12 @@ impl BrowserHost {
         self.socket_override.as_deref().map_or_else(installer::try_socket_path, installer::custom_socket)
     }
 
+    /// Spawns a fresh engine without attempting to reuse a pre-existing socket (used once after a
+    /// pre-existing socket closed before answering `Ready`).
+    pub(crate) fn connect_fresh(&mut self) {
+        self.connect(Start::FreshForPage);
+    }
+
     /// Hands the connect to a thread: this app's running engine (a UI hot reload), else the
     /// installed one, started, else a download that a page waits for.
     fn connect(&mut self, start: Start) {
@@ -186,18 +195,28 @@ impl BrowserHost {
             surfaces: self.surfaces.clone(),
             waker: self.message_waker.clone().or_else(|| self.waker.clone()),
             sock: sock.clone(),
+            profile: profile.clone(),
+            stderr: None,
             opens: self.pending_open_msgs(),
             extension_args,
             profile_permissions: self.site_permissions.list().to_vec(),
             preview_chunk_budget: self.preview_chunk_budget.clone(),
+            #[cfg(target_os = "linux")]
+            dmabuf_pools: self.dmabuf_pools.clone(),
         };
         let prefetch = self.prefetch.clone();
         let spawned = std::thread::Builder::new().name("opencode-browser-connect".into()).spawn(move || {
             if !link.current() {
                 return;
             }
-            if let Ok(stream) = UnixStream::connect(&sock) {
-                let _ = wire_stream(stream, mach_service, &link);
+            if start != Start::FreshForPage
+                && let Ok(stream) = UnixStream::connect(&sock)
+            {
+                crate::engine_log::log(
+                    link.profile.as_deref(),
+                    &format!("gen={generation} attach-existing sock={}", sock.display()),
+                );
+                let _ = wire_stream(stream, mach_service, &link, ConnectOrigin::Reused);
                 return;
             }
             let Some(profile) = profile else {
@@ -214,7 +233,7 @@ impl BrowserHost {
             spawn_and_attach(&engine, &sock, &profile, mach_service, &link);
             // Earlier versions this one replaces, now nothing starts them (for a page only: an
             // engine started ahead of one leaves the folder alone).
-            if start == Start::ForPage
+            if matches!(start, Start::ForPage | Start::FreshForPage)
                 && let Some(version) = engine.version
                 && let Some(root) = installer::try_engines_root()
             {
@@ -235,5 +254,6 @@ impl BrowserHost {
 #[derive(Clone, Copy, PartialEq)]
 enum Start {
     ForPage,
+    FreshForPage,
     Only,
 }

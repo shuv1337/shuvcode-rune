@@ -25,6 +25,7 @@
 pub const CONTEXT_ADD_SELECTION: u16 = 10;
 pub const NEW: u16 = 20;
 pub const HOME: u16 = 30;
+pub const AUTOMATIONS: u16 = 35;
 pub const BACK: u16 = 40;
 pub const FORWARD: u16 = 50;
 pub const AUTO_ACCEPT: u16 = 60;

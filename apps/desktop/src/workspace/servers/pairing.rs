@@ -100,7 +100,7 @@ fn redeem_at_once(link: &Link) -> Redeemed {
 
 /// `GET /auth/connect/<code>` on `url`: the session token, or whether the server refused it (401).
 fn connect(url: &str, code: &str) -> Result<String, bool> {
-    let agent: ureq::Agent = ureq::Agent::config_builder().timeout_global(Some(Duration::from_secs(5))).http_status_as_error(false).build().into();
+    let agent: ureq::Agent = net_trust::agent_config().timeout_global(Some(Duration::from_secs(5))).http_status_as_error(false).build().into();
     let mut resp = agent.get(format!("{url}/auth/connect/{code}")).call().map_err(|_| false)?;
     if resp.status().as_u16() == 401 {
         return Err(true);

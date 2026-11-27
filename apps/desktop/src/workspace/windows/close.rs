@@ -64,6 +64,7 @@ impl App {
             CloseWindow::Hide => match self.app_handle() {
                 Some(app) => {
                     self.window.hidden = true;
+                    self.sync_visible_browser_tabs();
                     app.hide();
                 }
                 None => tx.close_window(),
@@ -82,6 +83,7 @@ impl App {
         match self.app_handle() {
             Some(app) if cfg!(target_os = "macos") && !rune::quitting() => {
                 self.window.hidden = true;
+                self.sync_visible_browser_tabs();
                 app.hide();
             }
             _ => tx.close_window(),

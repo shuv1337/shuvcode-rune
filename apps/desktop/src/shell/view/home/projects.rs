@@ -63,12 +63,16 @@ pub(super) fn column(s: &App, p: &Pal, selected: Option<&model::Project>, wide: 
     let c = col().key("home-projects").w(PROJECTS_W).gap(16.0).child(header).child(rows);
     let c = if page_h > 56.0 { c.h(page_h - 56.0).self_start() } else { c };
     // `HomeUtilityNav` `mb-8 mt-4`, after the panel's `gap-4`.
-    c.mt(56.0).pt(52.0).sticky_top(56.0).child(utility(p, true).mt(16.0).mb(32.0))
+    c.mt(56.0).pt(52.0).sticky_top(56.0).child(utility(s, p, true).mt(16.0).mb(32.0))
 }
 
 /// `HomeUtilityNav`: Settings and Help. Under the projects (`lg:flex-col lg:pr-3`, full-width
 /// rows `gap-1`), or along Home's foot, one at each end.
-pub(super) fn utility(p: &Pal, stacked: bool) -> El {
+pub(super) fn utility(s: &App, p: &Pal, stacked: bool) -> El {
+    let automations = crate::automations::available(s).then(|| {
+        nav_row(p, "home-automations", &crate::automations::CLOCK, t!("automations.title"))
+            .on_press_tx(|s: &mut App, tx: &mut Tx| crate::automations::open(s, tx))
+    });
     let settings = nav_row(p, "home-settings", &ic::SETTINGS_GEAR, t!("sidebar.settings")).on_press_tx(|s: &mut App, tx: &mut Tx| {
         if !s.settings_open() {
             s.toggle_settings(tx);
@@ -78,10 +82,17 @@ pub(super) fn utility(p: &Pal, stacked: bool) -> El {
         crate::open_in::open_external(tx, "https://opencode.ai/desktop-feedback");
     });
     if stacked {
-        return col().key("home-utility").w_full().pr(12.0).gap(4.0).child(settings.w_full()).child(help.w_full());
+        return col()
+            .key("home-utility")
+            .w_full()
+            .pr(12.0)
+            .gap(4.0)
+            .children(automations.map(|a| a.w_full()))
+            .child(settings.w_full())
+            .child(help.w_full());
     }
     // `[&>button]:w-auto`: each as wide as its icon and label.
-    row().w_full().gap(4.0).justify_between().child(settings).child(help)
+    row().w_full().gap(4.0).justify_between().children(automations).child(settings).child(help)
 }
 
 /// `HomeProjectNavButton`: 28 tall, `px-1.5 gap-2`, the normal (16 pt) icon in icon-muted, the

@@ -94,10 +94,11 @@ link puts them first in the exe and together (`apps/desktop/scripts/link-order.s
 pages and few others. Without it the same functions lie spread over the whole of the code: on
 `dev-478` 9.5 MiB of launch code touched 2,569 pages of 16 KB (40 MiB).
 
-- **Linux reads the same list.** `.cargo/config.toml` names `apps/desktop/scripts/link-order-linux.sh`
-  as the linker of both Linux targets, so a plain `cargo build` orders the exe (the published
-  x86_64 build links with lld, which takes `--symbol-ordering-file`; a link that does not go
-  through lld, or that fails with the order, is made without it and says so). The list is trained
+- **Linux x86_64 reads the same list.** `.cargo/config.toml` names `apps/desktop/scripts/link-order-linux.sh`
+  as the linker of the x86_64 Linux target, so a plain `cargo build` orders the exe (that link goes
+  through lld, which takes `--symbol-ordering-file`; a link that fails with the order is made
+  without it and says so). The aarch64 Linux link goes through the system linker, which takes no
+  such order: that target is linked as cargo links it, without the script. The list is trained
   on macOS: the Linux build has about two thirds of its functions (8,011 of 11,765 on `dev-483`),
   which without the order lie on 4,600 pages spread over all 87 MiB of the code. A re-key of the
   list at a pin bump covers the three platforms.- **Names carry no crate hashes.** A hash changes with every Rune pin and every dependency bump;

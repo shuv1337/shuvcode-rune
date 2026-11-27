@@ -60,6 +60,9 @@ impl App {
             // Read scrolled up, it comes back where it was read; otherwise on its end.
             self.timeline_fx.ends.reopen(id);
         }
+        if *self.route != Route::here(id.to_owned()) {
+            crate::shell::memory_reclaim::on_tab_switched(self);
+        }
         *self.route = Route::here(id.to_owned());
         crate::narrow::follow_route(self, tx);
         crate::session_state::opened(self, id, tx);

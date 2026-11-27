@@ -90,6 +90,10 @@ pub(crate) fn recent(s: &App, p: &Pal) -> El {
     col().key("sidebar-recent").w_full().grow(1.0).shrink().min_h(0.0).child(scroll)
 }
 
+/// The Recent group header button currently under the pointer (not its Group and sort button),
+/// so only hovering the heading button brightens the label (`recent-sessions.tsx:1201`, `opencode#66265`).
+pub(crate) static HOVERED_HEADER: opencode_kernel::Slot<Option<String>> = opencode_kernel::Slot::new();
+
 /// Visible session UIDs for Consolidated List (`nav_order()`).
 pub(crate) fn consolidated_visible_uids(s: &App) -> Vec<String> {
     let here = crate::servers::runtime::active(s);
@@ -283,15 +287,33 @@ fn group_header(
             .center_y()
             .radius(6.0)
             .focus_inset(p)
-            .on_press_tx(move |s: &mut App, tx: &mut Tx| {
-                tx.instant();
+            // Commit without `tx.instant()` so the chevron rotates smoothly over 150 ms (`CHEVRON`,
+            // `recent-sessions.tsx:1222-1225`, `opencode#66265`).
+            .on_press_tx(move |s: &mut App, _tx: &mut Tx| {
                 recent_view::toggle_collapsed(s, &toggle_key);
             })
-            // The button has no fill of its own; its words take the base ink under the pointer
-            // (`recent-sessions.tsx:1201`: `text-v2-text-text-muted hover:text-v2-text-text-base`).
-            // They follow the header's hover here, so they are also in the base ink with the
-            // pointer on the Group and sort button, where official's stay muted.
-            .child(text(label.to_owned()).font(UI_MED).color(p.muted).group_color(p.text).shrink().truncate());
+            // Track pointer hover on the heading button itself so hovering the sibling Group and
+            // sort button keeps the heading label muted while keeping the chevron visible
+            // (`packages/app/src/shell/titlebar/recent-sessions.tsx:1201`, `opencode#66265`).
+            .on_hover_change({
+                let key = button_key.clone();
+                move |s: &mut App, inside: bool, tx: &mut Tx| {
+                    tx.instant();
+                    let slot = s.kernel.slots.get_mut(&HOVERED_HEADER);
+                    if inside {
+                        *slot = Some(key.clone());
+                    } else if slot.as_deref() == Some(key.as_str()) {
+                        *slot = None;
+                    }
+                }
+            })
+            .child(
+                text(label.to_owned())
+                    .font(UI_MED)
+                    .color(if s.kernel.slots.get(&HOVERED_HEADER).as_deref() == Some(button_key.as_str()) { p.text } else { p.muted })
+                    .shrink()
+                    .truncate(),
+            );
         if let Some(n) = count {
             btn = btn.child(text(n.to_string()).font(UI_SMALL).color(p.faint));
         }

@@ -68,15 +68,15 @@ pub const TAB_UI: TextStyle = opencode_ui::style::UI.features("\"tnum\"");
 
 pub const TERM_FONT: Knob = Knob::choice(
     "Terminal font",
-    &["Commit Mono", "IBM Plex Mono", "SF Mono", "JetBrains Mono"],
+    &["Commit Mono", "IBM Plex Mono", "SF Mono", "OpenMono"],
     3,
 )
 .about("Monospace font family in the terminal")
 .hints(&[
     "Kit's Ghostty Commit Mono face",
-    "OpenCode bundled IBM Plex Mono",
+    "System IBM Plex Mono face (falls back to OpenMono)",
     "macOS SF Mono system face",
-    "Desktop's JetBrainsMono Nerd Font Mono",
+    "Desktop's bundled OpenMono with Nerd Fonts icons",
 ]);
 
 pub const TERM_SIZE: Knob = Knob::new("Font size", 11.0, 18.0, 14.0)

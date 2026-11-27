@@ -16,8 +16,13 @@ impl BrowserHost {
         if let Ok(msg) = self.inbox_rx.try_recv() {
             self.held.borrow_mut().push_back(msg);
         }
+        #[cfg(feature = "engine")]
+        let needs_fresh = self.shared.lock().unwrap_or_else(PoisonError::into_inner).needs_fresh_spawn();
+        #[cfg(not(feature = "engine"))]
+        let needs_fresh = false;
         self.held.borrow().is_empty()
             && self.pending_opens.is_empty()
+            && !needs_fresh
             && self.status() == self.last_polled_status
             && self
                 .extensions
@@ -53,6 +58,7 @@ impl BrowserHost {
                     passkeys,
                     trace_isolation,
                     menu_extras,
+                    tab_lifecycle,
                     ..
                 } => {
                     if !matches!(
@@ -65,7 +71,7 @@ impl BrowserHost {
                         downloads, policy, prompts, popups, find, context_menu,
                         partitions, remote_proxy, agent_tools, preview, extensions,
                         permission_sync, frame_authority, cookies, agent_files, passkeys, trace_isolation,
-                        menu_extras,
+                        menu_extras, tab_lifecycle,
                     };
                     self.sync_site_permissions();
                     if cookies && self.share_sign_ins {
@@ -78,6 +84,7 @@ impl BrowserHost {
                     for t in &mut self.tabs {
                         t.files.clear();
                         t.prompts.reset_for_engine();
+                        t.scroll_cursor = Default::default();
                         t.find.step(crate::find::FindEvent::DocumentChanged);
                     }
                     rune::marks::mark("browser.engine.ready");
@@ -85,6 +92,10 @@ impl BrowserHost {
                     match self.color_scheme.load(std::sync::atomic::Ordering::Relaxed) {
                         0 => {}
                         s => self.send(HostMsg::SetColorScheme { dark: s == 2 }),
+                    }
+                    let fps = self.display_fps.load(std::sync::atomic::Ordering::Relaxed);
+                    if fps != 0 {
+                        self.send(HostMsg::SetFrameRate { fps });
                     }
 
                     // Tabs opened before it: their size and device emulation again
@@ -121,6 +132,18 @@ impl BrowserHost {
                         }
                     }
                     self.flush_pending_opens();
+                    if tab_lifecycle {
+                        self.send(HostMsg::SetVisibleTabs { tab_ids: self.visible_tabs.clone() });
+                        let active_holds: Vec<u64> = self
+                            .unthrottled_tabs
+                            .iter()
+                            .copied()
+                            .filter(|id| self.tabs.iter().any(|t| t.id == *id))
+                            .collect();
+                        for tab_id in active_holds {
+                            self.send(HostMsg::SetTabUnthrottled { tab_id, active: true });
+                        }
+                    }
                     changed = true;
                 }
                 EngineMsg::Refused { tab_id, reason } => {
@@ -184,6 +207,9 @@ impl BrowserHost {
                     }
                     self.pending_opens.retain(|(id, _)| *id != tab_id);
                     self.download_save_requests.retain(|r| r.tab_id != tab_id);
+                    self.tab_favicons.remove(&tab_id);
+                    self.visible_tabs.retain(|&x| x != tab_id);
+                    self.unthrottled_tabs.remove(&tab_id);
                     let fatal_close = if let Some(pos) = self.tabs.iter().position(|t| t.id == tab_id) {
                         let removed = self.tabs.remove(pos);
                         removed.surface.clear();
@@ -345,6 +371,15 @@ impl BrowserHost {
         }
         #[cfg(feature = "engine")]
         self.check_for_update_once();
+        #[cfg(feature = "engine")]
+        if self.shared.lock().unwrap_or_else(PoisonError::into_inner).needs_fresh_spawn() {
+            if self.has_engine_tabs() {
+                self.requeue_tabs();
+                self.connect_fresh();
+            } else {
+                self.shared.lock().unwrap_or_else(PoisonError::into_inner).step(EngineEvent::Shutdown);
+            }
+        }
         // An idle engine exited right as a new tab opened (before it could confirm it), or a
         // download finished while a tab waited for it: requeue unconfirmed tabs and reconnect.
         if !self.is_connected() && self.status() == EngineStatus::Installed && self.has_engine_tabs() {
@@ -374,4 +409,109 @@ impl BrowserHost {
         changed
     }
 
+    /// Whether the connected engine supports `SetVisibleTabs` and `SetTabUnthrottled`.
+    pub fn engine_tab_lifecycle(&self) -> bool {
+        self.caps.tab_lifecycle()
+    }
+
+    /// Currently tracked visible browser tab ids (read-only fast path for callers behind `Tracked`).
+    pub fn visible_tabs(&self) -> &[u64] {
+        &self.visible_tabs
+    }
+
+    /// Drops Linux dmabuf buffers held by the rx thread while a tab hides (preserving tombstone).
+    pub(crate) fn forget_dmabuf_pool(&self, tab_id: u64) {
+        #[cfg(all(feature = "engine", target_os = "linux"))]
+        {
+            if let Some(pools) = self.dmabuf_pools.lock().unwrap_or_else(PoisonError::into_inner).clone() {
+                pools.lock().unwrap_or_else(PoisonError::into_inner).forget(tab_id);
+            }
+        }
+        #[cfg(not(all(feature = "engine", target_os = "linux")))]
+        let _ = tab_id;
+    }
+
+    /// Drops Linux dmabuf buffers and tombstone when a tab closes permanently.
+    pub(crate) fn close_dmabuf_pool(&self, tab_id: u64) {
+        #[cfg(all(feature = "engine", target_os = "linux"))]
+        {
+            if let Some(pools) = self.dmabuf_pools.lock().unwrap_or_else(PoisonError::into_inner).clone() {
+                pools.lock().unwrap_or_else(PoisonError::into_inner).close(tab_id);
+            }
+        }
+        #[cfg(not(all(feature = "engine", target_os = "linux")))]
+        let _ = tab_id;
+    }
+
+    /// Replays `SetTabUnthrottled` and `SetVisibleTabs` after a `CloseTab`+`OpenTab` context switch
+    /// (`reopen_tab_as_web` / `reopen_tab_as_preview`) so visibility and RPC holds survive reopen.
+    pub(crate) fn replay_tab_lifecycle(&self, tab_id: u64) {
+        if !self.is_connected() || !self.caps.tab_lifecycle() {
+            return;
+        }
+        if self.unthrottled_tabs.contains(&tab_id) {
+            self.send(HostMsg::SetTabUnthrottled { tab_id, active: true });
+        }
+        if self.visible_tabs.contains(&tab_id) {
+            self.send(HostMsg::SetVisibleTabs { tab_ids: self.visible_tabs.clone() });
+        }
+    }
+
+    /// Updates the exact set of visible browser pane tabs (deduplicated; no-op if unchanged).
+    /// Clears desktop-side retained surfaces (and Linux dmabuf pools) only when the engine
+    /// supports `Ready.tab_lifecycle` and the hiding tab is not held awake by an RPC hold.
+    pub fn set_visible_tabs(&mut self, ids: &[u64]) {
+        let mut next = Vec::with_capacity(ids.len());
+        for &id in ids {
+            if !next.contains(&id) {
+                next.push(id);
+            }
+        }
+        if self.visible_tabs == next {
+            return;
+        }
+        let can_release = self.caps.tab_lifecycle();
+        for &old_id in &self.visible_tabs {
+            if !next.contains(&old_id) && can_release && !self.unthrottled_tabs.contains(&old_id) {
+                if let Some(t) = self.tabs.iter().find(|t| t.id == old_id) {
+                    t.surface.clear();
+                }
+                self.forget_dmabuf_pool(old_id);
+            }
+        }
+        self.visible_tabs = next;
+        if !self.is_connected() {
+            return;
+        }
+        if self.caps.tab_lifecycle() {
+            self.send(HostMsg::SetVisibleTabs { tab_ids: self.visible_tabs.clone() });
+        } else if let Some(&first) = self.visible_tabs.first()
+            && self.focused_tab != Some(first)
+        {
+            self.focus_tab(first);
+        }
+    }
+
+    /// Sets or clears the explicit agent RPC unthrottle hold on `tab_id` (deduplicated per tab,
+    /// gated on `Ready.tab_lifecycle`). When a hidden tab releases its hold, clears its retained
+    /// surface and Linux dmabuf pool as well.
+    pub fn set_tab_unthrottled(&mut self, tab_id: u64, active: bool) {
+        let changed = if active {
+            self.unthrottled_tabs.insert(tab_id)
+        } else {
+            self.unthrottled_tabs.remove(&tab_id)
+        };
+        if !changed {
+            return;
+        }
+        if !active && self.caps.tab_lifecycle() && !self.visible_tabs.contains(&tab_id) {
+            if let Some(t) = self.tabs.iter().find(|t| t.id == tab_id) {
+                t.surface.clear();
+            }
+            self.forget_dmabuf_pool(tab_id);
+        }
+        if self.is_connected() && self.caps.tab_lifecycle() {
+            self.send(HostMsg::SetTabUnthrottled { tab_id, active });
+        }
+    }
 }

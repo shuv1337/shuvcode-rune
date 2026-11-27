@@ -34,7 +34,7 @@ impl Server {
             encode_component(&target)
         );
         let req = self
-            .dress(self.agent.post(format!("{}{path}", self.base)), &[], None)
+            .dress(self.agent().post(format!("{}{path}", self.base)), &[], None)
             .header("Content-Type", "application/octet-stream")
             .header("Content-Length", size.to_string());
         let mut reader = Progress { body, sent: 0, report: sent, stopped: false };

@@ -1,18 +1,17 @@
-//! Media on attachments: `media:` ref fetches on a worker thread, decoded handles and the
-//! prepared-image cache behind a transcript's thumbnails.
+//! Media on attachments: `media:` ref fetches on a worker thread, scaled thumbnail handles, and
+//! a byte-budgeted LRU cache behind a transcript's thumbnails.
 
 pub mod bento;
+mod cache;
 pub mod drag;
 pub mod markdown;
 pub mod menu;
 pub mod viewer;
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
-#[cfg(not(target_arch = "wasm32"))]
-use std::sync::{Condvar, Weak};
+use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use rune::{El, Image, ImageCache, SurfaceFit, TextStyle, Waker, col, el, row, text};
 
@@ -22,6 +21,11 @@ use crate::TimelineHost;
 use crate::focus::FocusExt;
 use crate::palette::Pal;
 
+pub use cache::Media;
+use cache::{
+    MAX_META_ENTRIES, PIXEL_BUDGET, REF_BYTES_BUDGET, REST_PIXEL_BUDGET, RefSlot, THUMB_MAX_PT,
+    cap_map, dimensions, display_scale, load_thumb, scaled_weight, target_px,
+};
 pub use drag::{Dragged, draggable};
 pub use viewer::{Strip, Viewing, opens, poll, shown, view_image, viewer};
 
@@ -42,25 +46,37 @@ pub(crate) static OUTLINE_PHOTO: rune::Icon = rune::Icon {
 #[derive(Default)]
 pub struct MediaStore {
     pub(crate) videos: crate::video::Clips,
-    /// The image open in the viewer.
+    /// The image open in the viewer (decoded at full resolution on demand).
     pub viewing: Option<Viewing>,
     /// The open image's zoom and pan.
     pub zoom: rune_kit::ImageZoom,
     pub waker: Option<Waker>,
-    cache: RefCell<Option<ImageCache>>,
-    /// Decoded handles by the bytes' address, so a view doesn't re-hash megabytes each frame.
-    images: RefCell<HashMap<(usize, usize), PreparedImage>>,
-    /// `media:<hash>` refs: fetched once, decoded once, by hash.
+    cache: RefCell<Option<Arc<ImageCache>>>,
+    tick: Cell<u64>,
+    frame: Cell<u64>,
+    /// Decoded thumbnail handles by the bytes' address, bounded by `PIXEL_BUDGET` LRU.
+    images: RefCell<HashMap<(usize, usize), InlineEntry>>,
+    /// `media:<hash>` refs: fetched once, decoded to thumbnail size, bounded by LRU budgets.
     pub media: Media,
-    refs: RefCell<HashMap<String, Image>>,
-    /// A ref's header dimensions, so its box takes the image's own shape.
+    refs: RefCell<HashMap<String, RefSlot>>,
+    /// A ref's header dimensions, so its box keeps its shape even after byte eviction.
     ref_sizes: RefCell<HashMap<String, [u32; 2]>>,
-    /// A ref's encoded bytes, so dragging it out writes the image's own file.
-    ref_bytes: RefCell<HashMap<String, Arc<[u8]>>>,
     /// SHA-256 (a ref's hash) of inline images, by image id, computed only when a ref misses.
     shas: RefCell<HashMap<rune::ImageId, String>>,
     /// Pictures for markdown in replies: images and link favicons.
     pub markdown: std::rc::Rc<markdown::MdStore>,
+}
+
+pub(super) struct InlineEntry {
+    pub(super) prepared: PreparedImage,
+    pub(super) last_used: u64,
+    pub(super) last_frame: u64,
+}
+
+impl InlineEntry {
+    pub(super) fn weight(&self) -> usize {
+        cache::live_weight(&self.prepared.image, self.prepared.weight())
+    }
 }
 
 /// Header dimensions are available before decode; the same handle crosses from prefetch to view.
@@ -69,54 +85,66 @@ pub struct PreparedImage {
     bytes: Arc<[u8]>,
     pub image: Image,
     size: Option<[u32; 2]>,
-}
-
-/// The image's upright size: Rune turns a phone's JPEG by its EXIF orientation, so a quarter
-/// turn swaps the header's width and height.
-fn dimensions(bytes: &[u8]) -> Option<[u32; 2]> {
-    use image::ImageDecoder;
-    use image::metadata::Orientation::{Rotate90, Rotate90FlipH, Rotate270, Rotate270FlipH};
-    let mut decoder = image::ImageReader::new(std::io::Cursor::new(bytes)).with_guessed_format().ok()?.into_decoder().ok()?;
-    let (w, h) = decoder.dimensions();
-    let turned = matches!(decoder.orientation(), Ok(Rotate90 | Rotate270 | Rotate90FlipH | Rotate270FlipH));
-    (w > 0 && h > 0).then_some(if turned { [h, w] } else { [w, h] })
+    max_px: u32,
 }
 
 impl PreparedImage {
-    fn new(cache: &ImageCache, bytes: Arc<[u8]>) -> Self {
-        Self { size: dimensions(&bytes), image: cache.load(bytes.clone()), bytes }
+    fn new(cache: &ImageCache, bytes: Arc<[u8]>, mime: &str, max_pt: f32, scale: f32) -> Self {
+        let size = dimensions(&bytes);
+        let (image, max_px) = load_thumb(cache, bytes.clone(), mime, size, max_pt, scale);
+        Self { bytes, image, size, max_px }
     }
 
-    pub fn handle(&self) -> Image { self.image.clone() }
+    pub fn handle(&self) -> Image {
+        self.image.clone()
+    }
 
     pub fn weight(&self) -> usize {
-        // RGBA plus the mip chain; encoded bytes are counted by the page cache.
-        self.size.map_or(0, |[w, h]| w as usize * h as usize * 16 / 3)
+        // Scaled RGBA plus its mip chain; encoded bytes are counted separately.
+        scaled_weight(self.size, self.max_px)
     }
 
-    pub fn wait(&self) { self.image.wait().ok(); }
+    pub fn wait(&self) {
+        self.image.wait().ok();
+    }
 }
 
-/// Called only on the page worker. Newest attachments first, at most eight megapixels per
-/// page; older history stays demand-loaded. The page cache also counts decoded pixel weight.
+/// Called only on the page worker. Newest attachments first, decoded at thumbnail scale and
+/// bounded so page prefetch never spikes CPU RAM; older history stays demand-loaded.
 pub fn prepare_images(messages: &[Message], cache: &ImageCache) -> Vec<PreparedImage> {
     use opencode_kit::model::{Part, user_files};
+    let scale = display_scale();
+    let max_px = target_px(THUMB_MAX_PT, scale);
     let mut prepared = Vec::new();
-    let mut pixels = 0u64;
+    let mut weight = 0usize;
     let mut add = |f: &Attachment| {
-        if !decodable(&f.mime) || f.media.is_some() { return; }
-        let Some([w, h]) = dimensions(&f.bytes) else { return };
-        let count = u64::from(w) * u64::from(h);
-        if pixels + count > 8_000_000 || prepared.len() >= 8 { return; }
-        pixels += count;
-        prepared.push(PreparedImage::new(cache, f.bytes.clone()));
+        if !decodable(&f.mime) || f.media.is_some() || prepared.len() >= 6 {
+            return;
+        }
+        let size = dimensions(&f.bytes);
+        let w = scaled_weight(size, max_px);
+        if weight + w > 12 << 20 {
+            return;
+        }
+        weight += w;
+        prepared.push(PreparedImage::new(cache, f.bytes.clone(), &f.mime, THUMB_MAX_PT, scale));
     };
     for m in messages.iter().rev() {
         match m {
-            Message::User { id, .. } => { for f in user_files(id).iter().rev() { add(f); } }
-            Message::Assistant(a) => for p in a.parts.iter().rev() {
-                if let Part::Tool { files, .. } = p { for f in files.iter().rev() { add(f); } }
-            },
+            Message::User { id, .. } => {
+                for f in user_files(id).iter().rev() {
+                    add(f);
+                }
+            }
+            Message::Assistant(a) => {
+                for p in a.parts.iter().rev() {
+                    if let Part::Tool { files, .. } = p {
+                        for f in files.iter().rev() {
+                            add(f);
+                        }
+                    }
+                }
+            }
             _ => {}
         }
     }
@@ -127,11 +155,22 @@ pub fn prepare_images(messages: &[Message], cache: &ImageCache) -> Vec<PreparedI
 pub fn inline_images(messages: &[Message]) -> (usize, usize) {
     use opencode_kit::model::{Part, user_files};
     let (mut count, mut bytes) = (0, 0);
-    let mut add = |f: &Attachment| if decodable(&f.mime) && f.media.is_none() { count += 1; bytes += f.bytes.len(); };
+    let mut add = |f: &Attachment| {
+        if decodable(&f.mime) && f.media.is_none() {
+            count += 1;
+            bytes += f.bytes.len();
+        }
+    };
     for m in messages {
         match m {
             Message::User { id, .. } => user_files(id).iter().for_each(&mut add),
-            Message::Assistant(a) => for p in &a.parts { if let Part::Tool { files, .. } = p { files.iter().for_each(&mut add); } },
+            Message::Assistant(a) => {
+                for p in &a.parts {
+                    if let Part::Tool { files, .. } = p {
+                        files.iter().for_each(&mut add);
+                    }
+                }
+            }
             _ => {}
         }
     }
@@ -151,111 +190,56 @@ pub enum Fetched {
     Decoded,
 }
 
-#[cfg(not(target_arch = "wasm32"))]
-type FetchQueue = (Mutex<Vec<String>>, Condvar);
-
-/// Ref fetches, on one worker thread that takes the newest request first: a view asks top to
-/// bottom, and the bottom of a transcript is what shows.
-#[derive(Default)]
-pub struct Media {
-    fetch: Option<Fetch>,
-    state: Arc<Mutex<HashMap<String, Fetched>>>,
-    #[cfg(not(target_arch = "wasm32"))]
-    queue: RefCell<Option<Arc<FetchQueue>>>,
-    /// A fetch finished since the app last polled: the view must run again to show it.
-    landed: Arc<AtomicBool>,
-}
-
-impl Media {
-    pub fn get(&self, hash: &str, waker: Option<&Waker>) -> Fetched {
-        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(f) = state.get(hash) {
-            return f.clone();
-        }
-        let Some(fetch) = self.fetch.clone() else { return Fetched::Failed("no server".into()) };
-        state.insert(hash.to_owned(), Fetched::Loading);
-        drop(state);
-        // A page has no thread to wait on the queue: each ref is a task of its own.
-        #[cfg(target_arch = "wasm32")]
-        {
-            let (state, landed, hash) = (self.state.clone(), self.landed.clone(), hash.to_owned());
-            let wake = waker.cloned().unwrap_or_else(|| Arc::new(|| {}));
-            rune::task::spawn("opencode-media", move || {
-                let result = match fetch(&hash) {
-                    Ok(bytes) => Fetched::Ready(bytes.into()),
-                    Err(e) => Fetched::Failed(e),
-                };
-                state.lock().unwrap_or_else(|e| e.into_inner()).insert(hash, result);
-                landed.store(true, Ordering::Release);
-                wake();
-            })
-            .ok();
-            Fetched::Loading
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-        let mut queue = self.queue.borrow_mut();
-        let q = queue.get_or_insert_with(|| {
-            let q = Arc::new((Mutex::new(Vec::new()), Condvar::new()));
-            let wake = waker.cloned().unwrap_or_else(|| Arc::new(|| {}));
-            spawn_fetcher(Arc::downgrade(&q), self.state.clone(), self.landed.clone(), fetch, wake);
-            q
-        });
-        q.0.lock().unwrap_or_else(|e| e.into_inner()).push(hash.to_owned());
-        q.1.notify_one();
-        Fetched::Loading
-        }
-    }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn spawn_fetcher(queue: Weak<FetchQueue>, state: Arc<Mutex<HashMap<String, Fetched>>>, landed: Arc<AtomicBool>, fetch: Fetch, wake: Waker) {
-    if let Err(e) = std::thread::Builder::new()
-        .name("opencode-media".into())
-        .spawn(move || {
-            loop {
-                // Ends once the app (the queue's owner) is gone.
-                let Some(q) = queue.upgrade() else { return };
-                let next = {
-                    let mut stack = q.0.lock().unwrap_or_else(|e| e.into_inner());
-                    if stack.is_empty() {
-                        stack = match q.1.wait_timeout(stack, std::time::Duration::from_secs(1)) {
-                            Ok((g, _)) => g,
-                            Err(e) => e.into_inner().0,
-                        };
-                    }
-                    stack.pop()
-                };
-                drop(q);
-                let Some(hash) = next else { continue };
-                let result = match fetch(&hash) {
-                    Ok(bytes) => Fetched::Ready(bytes.into()),
-                    Err(e) => Fetched::Failed(e),
-                };
-                state.lock().unwrap_or_else(|e| e.into_inner()).insert(hash, result);
-                landed.store(true, Ordering::Release);
-                wake();
-            }
-        })
-    {
-        panic!("spawn media thread: {e}");
-    }
-}
-
 /// What the cache decodes (the image types Desktop's `<img>` shows, `util/src/artifact.ts`);
 /// other types show as a named chip. GIF, WebP and APNG animate.
 pub fn decodable(mime: &str) -> bool {
     matches!(
         mime,
-        "image/png" | "image/apng" | "image/jpeg" | "image/jpg" | "image/gif" | "image/webp" | "image/avif" | "image/bmp"
-            | "image/x-icon" | "image/vnd.microsoft.icon" | "image/svg+xml"
+        "image/png"
+            | "image/apng"
+            | "image/jpeg"
+            | "image/jpg"
+            | "image/gif"
+            | "image/webp"
+            | "image/avif"
+            | "image/bmp"
+            | "image/x-icon"
+            | "image/vnd.microsoft.icon"
+            | "image/svg+xml"
     )
 }
 
 impl MediaStore {
+    fn next_tick(&self) -> u64 {
+        let t = self.tick.get().wrapping_add(1);
+        self.tick.set(t);
+        t
+    }
+
+    /// Advances the render-frame epoch once per view pass so eviction never drops images touched
+    /// in the current frame.
+    pub fn begin_frame(&self) {
+        let next = self.frame.get().wrapping_add(1).max(1);
+        self.frame.set(next);
+        self.markdown.begin_frame();
+    }
+
+    /// Shared `rune::ImageCache` for this store and the server's page workers so identical
+    /// attachment bytes decode once across prefetch and timeline (`MdStore` keeps its own cache
+    /// with a version-bumping waker for markdown rows).
+    pub fn image_cache(&self) -> Arc<ImageCache> {
+        let mut cache = self.cache.borrow_mut();
+        cache
+            .get_or_insert_with(|| {
+                Arc::new(ImageCache::new(self.waker.clone().unwrap_or_else(|| Arc::new(|| {}))))
+            })
+            .clone()
+    }
+
     pub fn set_waker(&mut self, waker: Waker) {
-        self.markdown.set_waker(waker.clone());
-        self.waker = Some(waker);
+        self.waker = Some(waker.clone());
+        *self.cache.borrow_mut() = Some(Arc::new(ImageCache::new(waker.clone())));
+        self.markdown.set_waker(waker);
     }
 
     /// Whether a ref's bytes landed since the last call. The host's `poll` returns it, so a ref
@@ -267,7 +251,11 @@ impl MediaStore {
     /// A story controls byte arrival with the replay clock, then uses the real decoder.
     pub fn fixture_media(&self, hash: &str, bytes: Option<Vec<u8>>) {
         let ready = bytes.is_some();
-        self.media.state.lock().unwrap_or_else(|e| e.into_inner()).insert(hash.into(), bytes.map_or(Fetched::Loading, |b| Fetched::Ready(b.into())));
+        self.media
+            .state
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(hash.into(), bytes.map_or(Fetched::Loading, |b| Fetched::Ready(b.into())));
         if ready {
             let f = Attachment { mime: "image/png".into(), media: Some(hash.into()), ..Default::default() };
             if let Some(img) = self.image(&f) {
@@ -282,17 +270,29 @@ impl MediaStore {
         use opencode_kit::model::{Part, user_files};
         let mut ready = true;
         let mut check = |f: &Attachment| {
-            if !decodable(&f.mime) { return; }
+            if !decodable(&f.mime) {
+                return;
+            }
             let loaded = self.image(f).is_some_and(|i| i.is_ready())
                 || matches!(self.fetched(f), Some(Fetched::Failed(_)));
             ready &= loaded;
         };
         for message in t.messages.iter().rev().take(LATEST) {
             match message {
-                Message::User { id, .. } => for file in user_files(id).iter() { check(file); },
-                Message::Assistant(a) => for part in &a.parts {
-                    if let Part::Tool { files, .. } = part { for file in files { check(file); } }
-                },
+                Message::User { id, .. } => {
+                    for file in user_files(id).iter() {
+                        check(file);
+                    }
+                }
+                Message::Assistant(a) => {
+                    for part in &a.parts {
+                        if let Part::Tool { files, .. } = part {
+                            for file in files {
+                                check(file);
+                            }
+                        }
+                    }
+                }
                 _ => {}
             }
         }
@@ -300,97 +300,248 @@ impl MediaStore {
     }
 
     pub fn image_handles(&self) -> Vec<Image> {
-        self.images.borrow().values().map(|p| p.image.clone()).chain(self.refs.borrow().values().cloned()).collect()
+        let inline = self.images.borrow().values().map(|e| e.prepared.image.clone()).collect::<Vec<_>>();
+        let refs = self.refs.borrow().values().filter_map(|slot| match slot {
+            RefSlot::Decoded { image, .. } => Some(image.clone()),
+            RefSlot::Held { .. } => None,
+        }).collect::<Vec<_>>();
+        inline.into_iter().chain(refs).collect()
     }
 
-    /// A window at rest: lets go of decoded images whose source no page or transcript holds
-    /// any more, as the next `adopt` would.
+    /// Enforces active-session LRU budgets without shrinking below active viewport budgets
+    /// (used by quiet periodic sweeps while tabs are actively viewed).
+    pub fn trim_active(&self) {
+        self.images.borrow_mut().retain(|_, e| Arc::strong_count(&e.prepared.bytes) > 1);
+        self.evict_pixels(PIXEL_BUDGET, cache::Pin::None);
+        self.evict_ref_bytes(REF_BYTES_BUDGET, None);
+        self.media.prune_orphaned_ready(&self.refs.borrow());
+        self.markdown.trim(markdown::MD_PIXEL_BUDGET, markdown::MD_BYTES_BUDGET);
+    }
+
+    /// Drops orphaned inline entries and trims decoded pixels + encoded ref bytes down to rest
+    /// budgets, regardless of how many background tabs remain open.
     pub fn rest(&self) {
-        self.images.borrow_mut().retain(|_, p| Arc::strong_count(&p.bytes) > 1);
+        self.images.borrow_mut().retain(|_, e| Arc::strong_count(&e.prepared.bytes) > 1);
+        self.evict_pixels(REST_PIXEL_BUDGET, cache::Pin::None);
+        self.evict_ref_bytes(REF_BYTES_BUDGET, None);
+        self.media.prune_orphaned_ready(&self.refs.borrow());
+        self.markdown.trim(markdown::MD_REST_PIXEL_BUDGET, markdown::MD_BYTES_BUDGET);
     }
 
-    /// A window at rest with no session to show: decoded `media:` refs and markdown pictures let
-    /// go of their pixels. Each keeps its encoded bytes and its size (its box keeps its shape), so
-    /// a session opened again decodes them without fetching.
+    /// Called on tab switch or shown-tab close: closes any open lightbox (releasing its
+    /// full-resolution handle) and enforces active budgets without evicting the destination tab's
+    /// thumbnails before it renders.
+    pub fn on_tab_switch(&mut self) {
+        self.viewing = None;
+        self.trim_active();
+    }
+
+    /// Drops all decoded CPU pixels across inline attachments, `media:` refs, and markdown
+    /// pictures, keeping encoded bytes within budget so re-opening decodes without refetching.
     pub fn rest_pixels(&self) {
-        let bytes = self.ref_bytes.borrow();
+        self.images.borrow_mut().clear();
+        let mut refs = self.refs.borrow_mut();
         let mut state = self.media.state.lock().unwrap_or_else(|e| e.into_inner());
-        for (hash, _) in self.refs.borrow_mut().drain() {
-            match bytes.get(&hash) {
-                Some(b) => { state.insert(hash, Fetched::Ready(b.clone())); }
-                None => { state.remove(&hash); }
+        for (hash, slot) in refs.iter_mut() {
+            if slot.demote() > 0 {
+                state.insert(hash.clone(), Fetched::Ready(slot.bytes().clone()));
             }
         }
+        drop(state);
+        drop(refs);
+        self.evict_ref_bytes(REF_BYTES_BUDGET, None);
+        self.media.prune_orphaned_ready(&self.refs.borrow());
         self.markdown.rest();
     }
 
     pub fn adopt(&self, prepared: &[PreparedImage]) {
         let mut images = self.images.borrow_mut();
-        // A refreshed page has new byte addresses. Release handles once neither a page nor
-        // the transcript owns their source; repeated opens must not retain every old copy.
-        images.retain(|_, p| Arc::strong_count(&p.bytes) > 1);
+        images.retain(|_, e| Arc::strong_count(&e.prepared.bytes) > 1);
+        let now = self.next_tick();
         for p in prepared {
             let mut p = p.clone();
-            // A foreground refresh has its own decoder. Identical bytes already on screen
-            // keep their ready pixels, instead of replacing them with a pending handle.
-            if let Some(old) = images.values().find(|old| old.image.id() == p.image.id() && old.image.is_ready()) {
-                p.image = old.image.clone();
+            if let Some(old) = images.values().find(|old| old.prepared.image.id() == p.image.id() && old.prepared.image.is_ready()) {
+                p.image = old.prepared.image.clone();
+                p.max_px = old.prepared.max_px;
             }
-            images.insert((p.bytes.as_ptr() as usize, p.bytes.len()), p);
+            let key = (p.bytes.as_ptr() as usize, p.bytes.len());
+            images.insert(key, InlineEntry { prepared: p, last_used: now, last_frame: self.frame.get() });
         }
+        drop(images);
+        self.evict_pixels(PIXEL_BUDGET, cache::Pin::None);
     }
 
     /// The image's own shape at most 320×240 points (2× pixels). A ref's shape is known once its
     /// bytes land; until then it holds a 160×120 box.
     pub fn thumbnail_size(&self, f: &Attachment) -> (f32, f32) {
-        // An AVIF's or SVG's header isn't read here: its decoded size stands in (an SVG
-        // rasterizes at twice its own size, as thumbnails count pixels).
         let size = match &f.media {
-            Some(hash) => self.ref_sizes.borrow().get(hash).copied().or_else(|| self.refs.borrow().get(hash).and_then(Image::size)),
-            None => self.images.borrow().get(&(f.bytes.as_ptr() as usize, f.bytes.len())).and_then(|p| p.size.or_else(|| p.image.size())),
+            Some(hash) => self
+                .ref_sizes
+                .borrow()
+                .get(hash)
+                .copied()
+                .or_else(|| self.refs.borrow().get(hash).and_then(|s| s.size())),
+            None => {
+                let key = (f.bytes.as_ptr() as usize, f.bytes.len());
+                self.images
+                    .borrow()
+                    .get(&key)
+                    .and_then(|e| e.prepared.size.or_else(|| e.prepared.image.size()))
+                    .or_else(|| dimensions(&f.bytes))
+            }
         };
         size.map_or((160.0, 120.0), |[w, h]| fit(w as f32 / 2.0, h as f32 / 2.0, 320.0, 240.0))
     }
 
-    /// Where `media:` refs' bytes come from.
-    pub fn set_fetch(&mut self, fetch: Fetch) {
-        self.media.fetch = Some(fetch);
+    /// Natural pixel dimensions from the image header, if known, for the lightbox viewer.
+    pub(crate) fn natural_size(&self, f: &Attachment) -> Option<[u32; 2]> {
+        match &f.media {
+            Some(hash) => self
+                .ref_sizes
+                .borrow()
+                .get(hash)
+                .copied()
+                .or_else(|| self.refs.borrow().get(hash).and_then(|s| s.size())),
+            None => {
+                let key = (f.bytes.as_ptr() as usize, f.bytes.len());
+                self.images
+                    .borrow()
+                    .get(&key)
+                    .and_then(|e| e.prepared.size)
+                    .or_else(|| dimensions(&f.bytes))
+            }
+        }
     }
 
-    /// The decoded image (PNG and JPEG; None for other types, which show as a named chip, and
-    /// for a ref whose bytes haven't arrived, which starts fetching them).
+    /// Where `media:` refs' bytes come from.
+    pub fn set_fetch(&mut self, fetch: Fetch) {
+        self.media.set_fetch(fetch);
+    }
+
+    /// Decoded thumbnail handle for `a` at default gallery scale (`THUMB_MAX_PT`).
     pub fn image(&self, a: &Attachment) -> Option<Image> {
+        self.image_sized(a, THUMB_MAX_PT)
+    }
+
+    /// Decoded thumbnail handle for `a`, scaled to fit `max_pt` logical points at the current
+    /// display scale so CPU RAM never holds full 4K/5K RGBA mip chains for small timeline tiles.
+    pub fn image_sized(&self, a: &Attachment, max_pt: f32) -> Option<Image> {
         if !decodable(&a.mime) {
             return None;
         }
+        let scale = display_scale();
+        let wanted_px = target_px(max_pt, scale);
+        let now = self.next_tick();
+        let cur_frame = self.frame.get();
+
         if let Some(hash) = &a.media {
-            if let Some(img) = self.refs.borrow().get(hash) {
-                return Some(img.clone());
+            let hit = {
+                let mut refs = self.refs.borrow_mut();
+                refs.get_mut(hash).map(|slot| match slot {
+                    RefSlot::Decoded { image, max_px, last_used, last_frame, .. } if *max_px >= wanted_px => {
+                        *last_used = now;
+                        *last_frame = cur_frame;
+                        (image.clone(), false)
+                    }
+                    RefSlot::Decoded { bytes, size, .. } | RefSlot::Held { bytes, size, .. } => {
+                        let bytes = bytes.clone();
+                        let size = *size;
+                        let cache = self.image_cache();
+                        let (img, max_px) = load_thumb(&cache, bytes.clone(), &a.mime, size, max_pt, scale);
+                        let weight = scaled_weight(size, max_px);
+                        *slot = RefSlot::Decoded { image: img.clone(), bytes, size, max_px, weight, last_used: now, last_frame: cur_frame };
+                        self.media.state.lock().unwrap_or_else(|e| e.into_inner()).insert(hash.clone(), Fetched::Decoded);
+                        (img, true)
+                    }
+                })
+            };
+            if let Some((img, decoded)) = hit {
+                if decoded {
+                    self.evict_pixels(PIXEL_BUDGET, cache::Pin::Ref(hash));
+                }
+                return Some(img);
             }
-            // A page read swaps a live event's inline image for its ref: keep the pixels shown.
             if let Some(p) = self.inline_copy(hash) {
-                self.adopt_ref(hash, p.image.clone(), p.size, p.bytes.clone());
-                return Some(p.image);
+                // Upgrade composer-sized thumbnails (160 pt) to timeline resolution when adopted.
+                let (img, max_px, weight) = if p.max_px >= wanted_px {
+                    (p.image.clone(), p.max_px, p.weight())
+                } else {
+                    let cache = self.image_cache();
+                    let (img, max_px) = load_thumb(&cache, p.bytes.clone(), &a.mime, p.size, max_pt, scale);
+                    (img, max_px, scaled_weight(p.size, max_px))
+                };
+                self.adopt_ref(hash, img.clone(), p.size, p.bytes.clone(), max_px, weight, now);
+                self.evict_pixels(PIXEL_BUDGET, cache::Pin::Ref(hash));
+                self.evict_ref_bytes(REF_BYTES_BUDGET, Some(hash));
+                return Some(img);
             }
-            let Fetched::Ready(bytes) = self.media.get(hash, self.waker.as_ref()) else { return None };
-            let img = self.load(bytes.clone());
-            self.adopt_ref(hash, img.clone(), dimensions(&bytes), bytes.clone());
+            let Fetched::Ready(bytes) = self.media.get(hash, self.waker.as_ref()) else {
+                return None;
+            };
+            let size = dimensions(&bytes);
+            let cache = self.image_cache();
+            let (img, max_px) = load_thumb(&cache, bytes.clone(), &a.mime, size, max_pt, scale);
+            self.adopt_ref(hash, img.clone(), size, bytes, max_px, scaled_weight(size, max_px), now);
+            self.evict_pixels(PIXEL_BUDGET, cache::Pin::Ref(hash));
+            self.evict_ref_bytes(REF_BYTES_BUDGET, Some(hash));
             return Some(img);
         }
+
         let key = (a.bytes.as_ptr() as usize, a.bytes.len());
-        if let Some(p) = self.images.borrow().get(&key) {
-            return Some(p.image.clone());
+        if let Some(entry) = self.images.borrow_mut().get_mut(&key)
+            && entry.prepared.max_px >= wanted_px
+        {
+            entry.last_used = now;
+            entry.last_frame = cur_frame;
+            return Some(entry.prepared.image.clone());
         }
-        let img = self.load(a.bytes.clone());
-        self.images.borrow_mut().insert(key, PreparedImage { bytes: a.bytes.clone(), image: img.clone(), size: dimensions(&a.bytes) });
+        let cache = self.image_cache();
+        let prepared = PreparedImage::new(&cache, a.bytes.clone(), &a.mime, max_pt, scale);
+        let img = prepared.image.clone();
+        self.images.borrow_mut().insert(key, InlineEntry { prepared, last_used: now, last_frame: cur_frame });
+        self.evict_pixels(PIXEL_BUDGET, cache::Pin::Inline(key));
         Some(img)
     }
 
-    fn adopt_ref(&self, hash: &str, img: Image, size: Option<[u32; 2]>, bytes: Arc<[u8]>) {
-        self.refs.borrow_mut().insert(hash.to_owned(), img);
-        self.ref_bytes.borrow_mut().insert(hash.to_owned(), bytes);
-        if let Some(size) = size { self.ref_sizes.borrow_mut().insert(hash.to_owned(), size); }
+    /// Decodes `a` at full native resolution on demand for the lightbox viewer without inserting it
+    /// into the thumbnail LRU cache, so closing the viewer releases full-res CPU pixels immediately.
+    pub(crate) fn image_full(&self, a: &Attachment) -> Option<Image> {
+        if !decodable(&a.mime) {
+            return None;
+        }
+        let bytes = self.bytes(a)?;
+        Some(self.image_cache().load(bytes))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn adopt_ref(&self, hash: &str, img: Image, size: Option<[u32; 2]>, bytes: Arc<[u8]>, max_px: u32, weight: usize, now: u64) {
+        self.refs.borrow_mut().insert(hash.to_owned(), RefSlot::Decoded { image: img, bytes, size, max_px, weight, last_used: now, last_frame: self.frame.get() });
+        if let Some(size) = size {
+            let mut sizes = self.ref_sizes.borrow_mut();
+            cap_map(&mut sizes);
+            sizes.insert(hash.to_owned(), size);
+        }
         self.media.state.lock().unwrap_or_else(|e| e.into_inner()).insert(hash.to_owned(), Fetched::Decoded);
+    }
+
+    /// Evicts least-recently-used decoded thumbnail handles until total pixel weight fits `budget`.
+    fn evict_pixels(&self, budget: usize, pin: cache::Pin<'_>) {
+        let cur_frame = (self.frame.get() > 0).then(|| self.frame.get());
+        let demoted = cache::evict_pixels(&mut self.images.borrow_mut(), &mut self.refs.borrow_mut(), budget, pin, cur_frame);
+        if !demoted.is_empty() {
+            let mut state = self.media.state.lock().unwrap_or_else(|e| e.into_inner());
+            for (hash, bytes) in demoted {
+                state.insert(hash, Fetched::Ready(bytes));
+            }
+        }
+    }
+
+    /// Evicts oldest encoded `media:` ref bytes once total cached ref bytes exceed `budget`.
+    fn evict_ref_bytes(&self, budget: usize, pin: Option<&str>) {
+        let cur_frame = (self.frame.get() > 0).then(|| self.frame.get());
+        for hash in cache::evict_ref_bytes(&mut self.refs.borrow_mut(), budget, pin, cur_frame) {
+            self.media.forget(&hash);
+        }
     }
 
     /// An inline image already held whose bytes are the ref's (the server's hash is SHA-256).
@@ -399,15 +550,19 @@ impl MediaStore {
         use sha2::{Digest, Sha256};
         let images = self.images.borrow();
         let mut shas = self.shas.borrow_mut();
-        images.values().find(|p| {
-            shas.entry(p.image.id()).or_insert_with(|| format!("{:x}", Sha256::digest(&p.bytes))) == hash
-        }).cloned()
+        if shas.len() > MAX_META_ENTRIES {
+            shas.clear();
+        }
+        images
+            .values()
+            .find(|e| shas.entry(e.prepared.image.id()).or_insert_with(|| format!("{:x}", Sha256::digest(&e.prepared.bytes))) == hash)
+            .map(|e| e.prepared.clone())
     }
 
     /// An attachment's encoded bytes: inline ones as they are, a ref's once they've landed.
     pub fn bytes(&self, a: &Attachment) -> Option<Arc<[u8]>> {
         match &a.media {
-            Some(hash) => self.ref_bytes.borrow().get(hash).cloned(),
+            Some(hash) => self.refs.borrow().get(hash).map(|s| s.bytes().clone()),
             None => (!a.bytes.is_empty()).then(|| a.bytes.clone()),
         }
     }
@@ -426,11 +581,6 @@ impl MediaStore {
     pub fn fetched(&self, a: &Attachment) -> Option<Fetched> {
         let hash = a.media.as_ref()?;
         self.media.state.lock().unwrap_or_else(|e| e.into_inner()).get(hash).cloned()
-    }
-
-    fn load(&self, bytes: Arc<[u8]>) -> Image {
-        let mut cache = self.cache.borrow_mut();
-        cache.get_or_insert_with(|| ImageCache::new(self.waker.clone().unwrap_or_else(|| Arc::new(|| {})))).load(bytes)
     }
 }
 
@@ -463,8 +613,6 @@ pub fn markdown_pictures<S: TimelineHost>(p: &Pal, md: rune_kit::Markdown, m: ma
     md.images(move |src| images.store.read_image(images.directory.as_deref(), src).ok().flatten())
         .link_favicon(move |url| favicons.favicon(url))
         .image_frame(move |img, f| {
-            // Keyed by its place: the reply's row, then the image's turn among the same picture
-            // in it, so the same picture in two replies (or twice in one) flies from its own.
             let place = format!("{}:{}:{}", m.scope.as_deref().or(m.message.as_deref()).unwrap_or(""), f.src, f.alt);
             let nth = {
                 let mut seen = seen.borrow_mut();
@@ -473,18 +621,46 @@ pub fn markdown_pictures<S: TimelineHost>(p: &Pal, md: rune_kit::Markdown, m: ma
                 *n - 1
             };
             let id = format!("md-image:{place}:{nth}");
-            // While the viewer shows it, its place holds empty, keyed apart so the image flies.
-            // The markdown keys the block itself, so the picture and its stand-in sit inside it.
             if m.viewing.as_deref() == Some(id.as_str()) {
                 return el().w_full().child(img.key(viewer::HELD).opacity(0.0));
             }
             let name = if f.alt.is_empty() { opencode_i18n::t!("ui.imagePreview.alt").to_owned() } else { f.alt.to_owned() };
-            let image = f.image.clone();
-            let dragged = Dragged::Markdown { directory: m.directory.as_deref().map(str::to_owned), src: f.src.to_owned() };
+            let fallback = f.image.clone();
+            let dir = m.directory.as_deref().map(str::to_owned);
+            let src = f.src.to_owned();
+            let img = match m.store.natural_size(dir.as_deref(), &src) {
+                Some([natural_w, _]) if natural_w > 0 => img.max_w(natural_w as f32),
+                _ => img,
+            };
+            let dragged = Dragged::Markdown { directory: dir.clone(), src: src.clone() };
             let img = menu::on_image::<S>(draggable::<S>(img, dragged.clone()), dragged.clone(), m.message.as_deref());
-            el().w_full().child(img.key("img").matched(id.clone()).token_motion(m.flight).role("button").label(name.clone()).focusable(true).focus_default(&pal).cursor(rune::Cursor::ZoomIn).on_press_tx(move |s: &mut S, tx: &mut rune::Tx| {
-                viewer::open(s, Viewing { id: id.clone(), name: name.clone(), image: image.clone(), dragged: dragged.clone(), strip: None }, tx);
-            }))
+            el().w_full().child(
+                img.key("img")
+                    .matched(id.clone())
+                    .token_motion(m.flight)
+                    .role("button")
+                    .label(name.clone())
+                    .focusable(true)
+                    .focus_default(&pal)
+                    .cursor(rune::Cursor::ZoomIn)
+                    .on_press_tx(move |s: &mut S, tx: &mut rune::Tx| {
+                        let md = &s.media_store().markdown;
+                        let full = md.image_full(dir.as_deref(), &src).unwrap_or_else(|| fallback.clone());
+                        let natural = md.natural_size(dir.as_deref(), &src);
+                        viewer::open(
+                            s,
+                            Viewing {
+                                id: id.clone(),
+                                name: name.clone(),
+                                resolution: viewer::Resolution::new(full, fallback.clone()),
+                                natural,
+                                dragged: dragged.clone(),
+                                strip: None,
+                            },
+                            tx,
+                        );
+                    }),
+            )
         })
 }
 
@@ -509,11 +685,7 @@ pub fn gallery<S: TimelineHost>(s: &S, p: &Pal, key: &str, files: &[Attachment],
     }
     let strip: Arc<[Attachment]> = images.iter().map(|&f| f.clone()).collect();
     let store = s.media_store();
-    enum TileState {
-        Ready(Image),
-        Loading,
-        Failed,
-    }
+    enum TileState { Ready(Image), Loading, Failed }
     // Pictures (ready, loading, or failed) go in the bento block; server-unavailable placeholders
     // show as named chips (`tool-result-images.tsx:78-94`, `message-part.css:821`).
     let mut shown = Vec::new();

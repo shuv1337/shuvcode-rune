@@ -256,14 +256,10 @@ pub fn download_crx(target: &StoreTarget, chrome_version: &str) -> Option<Vec<u8
 
     let mut url = store_download_url(target, chrome_version)?;
     let deadline = Instant::now() + Duration::from_secs(DOWNLOAD_TIMEOUT_SECS);
-    let tls = ureq::tls::TlsConfig::builder()
-        .root_certs(ureq::tls::RootCerts::PlatformVerifier)
-        .build();
-    let agent: ureq::Agent = ureq::Agent::config_builder()
+    let agent: ureq::Agent = net_trust::agent_config()
         .https_only(true)
         .max_redirects(0)
         .http_status_as_error(false)
-        .tls_config(tls)
         .build()
         .into();
 

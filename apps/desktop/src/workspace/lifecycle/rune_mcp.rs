@@ -51,7 +51,7 @@ impl RuneMcpHost for App {
 
     fn route(&self) -> McpRoute<'_> {
         match &*self.route {
-            Route::Home => McpRoute::Home,
+            Route::Home | Route::Automations => McpRoute::Home,
             Route::Draft(id) => McpRoute::Draft(id.as_str()),
             Route::Session { server, id } => McpRoute::Session { server, id: id.as_str() },
         }

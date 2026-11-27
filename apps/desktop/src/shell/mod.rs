@@ -4,6 +4,7 @@ pub mod chrome;
 pub mod commands;
 pub mod diag;
 pub mod input;
+pub mod memory_reclaim;
 pub mod menus;
 pub mod narrow;
 pub mod nav;

@@ -20,6 +20,7 @@ use serde_json::Value;
 use crate::model::{self, Delivery, Pending, SessionInfo};
 use crate::wire_error::{WireError, WireKind};
 
+mod automations;
 pub mod browser_rpc;
 mod downloads;
 mod http;
@@ -48,6 +49,7 @@ pub mod web;
 mod wire;
 mod worker;
 
+pub use automations::{AutomationEndpoint, is_automation_endpoint_unsupported};
 pub use downloads::{export_filename, save_download, set_download_dir};
 pub use hub::{EventHub, HUB_AT, connect_workers, heard_at};
 pub use ids::{message_id, session_id};
@@ -153,8 +155,9 @@ pub struct Server {
     /// Its files aren't this machine's even on a loopback address (a WSL distro's server, an SSH
     /// tunnel), as Desktop treats a contributed server.
     pub(crate) remote_files: bool,
-    /// Every request's connections, kept alive between them ([`http::agent_for`]).
-    pub(crate) agent: ureq::Agent,
+    /// Every request's connections, kept alive between them ([`http::agent_for`]), made on the
+    /// first request ([`Server::agent`]).
+    pub(crate) agent: std::sync::OnceLock<ureq::Agent>,
 }
 
 impl std::fmt::Debug for Server {
@@ -191,13 +194,13 @@ impl Server {
             .map(|p| p.trim().to_owned())
             .filter(|p| !p.is_empty())
             .map(|p| format!("Basic {}", base64(format!("opencode:{p}").as_bytes())));
-        Server { agent: http::agent_for(&clean), base: clean, auth, media_refs: false, remote_files: false }
+        Server { agent: std::sync::OnceLock::new(), base: clean, auth, media_refs: false, remote_files: false }
     }
 
     /// `base` with no password (not even the environment's), for a caller that brings its own.
     pub fn anonymous(base: &str) -> Server {
         let clean = base.trim_end_matches('/').to_owned();
-        Server { agent: http::agent_for(&clean), base: clean, auth: None, media_refs: false, remote_files: false }
+        Server { agent: std::sync::OnceLock::new(), base: clean, auth: None, media_refs: false, remote_files: false }
     }
 
     /// Uses `password` (a token from a connect link, say) in place of the one `new` found.
@@ -698,7 +701,7 @@ impl Server {
         use crate::wire_error::{read_failure, transport};
         use worker::{Handshake, StreamEffect, StreamEvent, stream_step};
         let down = |kind: WireKind| WireError::new("GET", "/api/event", kind);
-        let config = ureq::Agent::config_builder().timeout_per_read(Some(stream.idle)).http_status_as_error(false).max_redirects(0);
+        let config = net_trust::agent_config_for(&self.base).timeout_per_read(Some(stream.idle)).http_status_as_error(false).max_redirects(0);
         let agent: ureq::Agent = if http::loopback(&self.base) { config.proxy(None) } else { config }.build().into();
         let mut req = agent.get(format!("{}/api/event", self.base)).header("Accept", "text/event-stream");
         if let Some(a) = &self.auth {
@@ -722,7 +725,11 @@ impl Server {
                 stream_step(state, StreamEvent::Closed);
                 return Ok(());
             }
+            let shrink = line.len() <= 64 * 1024 && line.capacity() > 256 * 1024;
             line.clear();
+            if shrink {
+                line.shrink_to(64 * 1024);
+            }
             let limit = 32 << 20;
             let read = (&mut reader).take(limit + 1).read_line(&mut line).map_err(|e| down(read_failure(e)))?;
             if read == 0 { break; }
@@ -770,12 +777,12 @@ impl Server {
 /// heartbeat, a comment or a line it can't read.
 fn event_line(line: &str) -> Option<Incoming> {
     let data = line.strip_prefix("data:")?;
-    let v = serde_json::from_str::<Value>(data.trim()).ok()?;
+    let mut v = serde_json::from_str::<Value>(data.trim()).ok()?;
     let ty = v["type"].as_str().unwrap_or("").to_owned();
     if ty.is_empty() || ty == "server.heartbeat" {
         return None;
     }
-    let mut data = v["data"].clone();
+    let mut data = v["data"].take();
     // A compaction message, and a notice's, takes its id from the event that started it.
     if (ty.starts_with("session.compaction.") || crate::model::is_notice_event(&ty))
         && let Some(id) = v["id"].as_str()

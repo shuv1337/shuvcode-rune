@@ -7,6 +7,7 @@ license.workspace = true
 
 [dependencies]
 harness-log = { path = "../harness-log" }
+net-trust = { path = "../net-trust" }
 serde_json.workspace = true
 web-time = "1.1"
 

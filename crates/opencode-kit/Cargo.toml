@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 base64.workspace = true
 getrandom = "0.3"
+net-trust = { path = "../net-trust" }
 rune.workspace = true
 serde_json.workspace = true
 serde = { version = "1", features = ["derive", "rc"] }

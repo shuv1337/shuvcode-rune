@@ -219,10 +219,13 @@ fn land_read(host: &mut dyn FilesHost, landed: content::Landed, tx: &mut Tx) -> 
     let link = {
         let pane = host.files_mut();
         let wrap = pane.wrap;
-        let picture = match &body {
-            content::Body::Image(bytes) => Some(pane.picture(bytes.clone(), false)),
-            content::Body::Svg(_, bytes) => Some(pane.picture(bytes.clone(), true)),
-            _ => None,
+        let (picture, body) = match body {
+            content::Body::Image(bytes) => {
+                let len = bytes.len();
+                (Some(pane.picture(bytes, false)), content::Body::Binary(len))
+            }
+            content::Body::Svg(text, bytes) => (Some(pane.picture(bytes, true)), content::Body::Text(text)),
+            other => (None, other),
         };
         let ws = pane.sessions.entry(sid.clone()).or_default();
         match picture {

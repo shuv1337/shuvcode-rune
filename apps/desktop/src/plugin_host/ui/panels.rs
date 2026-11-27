@@ -260,7 +260,23 @@ pub fn render(app: &App, p: &Pal, ctx: &PanelViewCtx) -> El {
     let instance = if all[k].list.is_some() { ctx.tab.id.as_str() } else { "" };
     let suffix = if ctx.mobile { ":mobile" } else { "" };
     let spec = &all[k].spec;
+    #[cfg(not(target_arch = "wasm32"))]
+    let track_surface = (ctx.visible && !ctx.mobile).then(|| {
+        (
+            app.plugins.renders.get(),
+            crate::surfaces::browser::poll::begin_panel_surface_render(),
+        )
+    });
     let body = render_surface(app, p, i, &format!("panel:{}:{}:{instance}{suffix}", spec.id, ctx.session_id), f, data);
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Some((renders_before, guard)) = track_surface {
+        guard.finish(
+            app,
+            app.panel_root(ctx.session_id).to_owned(),
+            crate::panels::panel_key(ctx.plugin, &ctx.tab.id),
+            app.plugins.renders.get() != renders_before,
+        );
+    }
     let key = if instance.is_empty() { format!("plugin-{}-{}", ctx.plugin, spec.id) } else { format!("plugin-{}-{}-{instance}", ctx.plugin, spec.id) };
     #[cfg(not(target_arch = "wasm32"))]
     let review_bar = if ctx.plugin == crate::surfaces::browser::PLUGIN

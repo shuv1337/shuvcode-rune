@@ -74,9 +74,7 @@ pub(crate) fn blocked(code: u16) -> bool {
 /// that inspects TLS with its own root, as companies' do, still works) and the proxy the
 /// environment names.
 pub(crate) fn agent(timeout: Duration) -> ureq::Agent {
-    let tls = ureq::tls::TlsConfig::builder().root_certs(ureq::tls::RootCerts::PlatformVerifier).build();
-    ureq::Agent::config_builder()
-        .tls_config(tls)
+    net_trust::agent_config()
         .timeout_connect(Some(timeout))
         .timeout_recv_response(Some(timeout))
         .timeout_recv_body(Some(BODY_LIMIT))

@@ -96,7 +96,7 @@ pub trait QueueHost: opencode_kernel::AppEnv + opencode_kernel::AppFeedback {
     fn write_quiet(&mut self, write: Write) -> Offered {
         if self.write(write) { Offered::Sent } else { Offered::NoWriter }
     }
-    /// Builds the write used to send `prompt` to `session` (e.g. `Send` or `SendMovingHome`).
+    /// Builds the write used to send `prompt` to `session` (`Send`).
     fn send_write(&self, session: &str, prompt: Prompt) -> Write {
         Write::Send { session: session.to_owned(), prompt }
     }

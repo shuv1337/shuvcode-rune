@@ -39,16 +39,16 @@ pub enum SlowSend {
 /// Which server write an outbox entry performs.
 #[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Operation {
+    /// `MovingHome` in a profile saved before the "Session location unavailable" card: a reply to a
+    /// subagent that moved its session to its project's checkout by itself when its folder was
+    /// gone. It is a plain send now, and the card asks where the session goes on.
     #[default]
+    #[serde(alias = "MovingHome")]
     Send,
-    /// A reply to a subagent whose folder may be gone (`subagents/reply.rs`).
-    MovingHome,
     /// A queued follow-up submitted with Alt+Enter (`#63109`): once admitted to the server's inbox,
     /// moves ahead of existing queued prompts (or immediately after any still-queued `after` IDs
     /// submitted with Alt+Enter even more recently before this entry drained).
     SendFirst {
-        #[serde(default)]
-        moving_home: bool,
         #[serde(default)]
         after: Vec<String>,
     },
@@ -69,8 +69,7 @@ impl Operation {
     /// Marks a plain send or subagent reply to move to the front of the queue once admitted.
     pub fn into_first(self) -> Self {
         match self {
-            Self::Send => Self::SendFirst { moving_home: false, after: Vec::new() },
-            Self::MovingHome => Self::SendFirst { moving_home: true, after: Vec::new() },
+            Self::Send => Self::SendFirst { after: Vec::new() },
             other => other,
         }
     }
@@ -78,8 +77,7 @@ impl Operation {
     /// Drops any queue-first intent (e.g. when promoted directly to a steer before send).
     pub fn into_plain(self) -> Self {
         match self {
-            Self::SendFirst { moving_home: true, .. } => Self::MovingHome,
-            Self::SendFirst { moving_home: false, .. } => Self::Send,
+            Self::SendFirst { .. } => Self::Send,
             other => other,
         }
     }
@@ -102,8 +100,7 @@ impl Operation {
 
     pub fn write(&self, session: String, prompt: Prompt) -> Write {
         match self {
-            Self::Send | Self::SendFirst { moving_home: false, .. } => Write::Send { session, prompt },
-            Self::MovingHome | Self::SendFirst { moving_home: true, .. } => Write::SendMovingHome { session, prompt },
+            Self::Send | Self::SendFirst { .. } => Write::Send { session, prompt },
             Self::Start(directory) => Write::StartAs { session, directory: directory.clone(), prompt },
             Self::Worktree { project, from, branch } => {
                 Write::StartInNewWorktree { session, project: project.clone(), from: from.clone(), branch: branch.clone(), prompt }

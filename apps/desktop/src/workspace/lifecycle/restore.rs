@@ -26,13 +26,13 @@ static KEPT_PLACES: Slot<places::Kept> = Slot::new();
 pub fn draft_key(route: &Route) -> Option<String> {
     match route {
         Route::Session { id, .. } | Route::Draft(id) => Some(id.clone()),
-        Route::Home => None,
+        Route::Home | Route::Automations => None,
     }
 }
 
 fn to_restore_route(route: &Route) -> RestoreRoute {
     match route {
-        Route::Home => RestoreRoute::Home,
+        Route::Home | Route::Automations => RestoreRoute::Home,
         Route::Draft(id) => RestoreRoute::Draft(id.clone()),
         Route::Session { server, id } => RestoreRoute::Session { server: server.clone(), id: id.clone() },
     }

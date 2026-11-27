@@ -244,7 +244,6 @@ fn persist_ids(host: &mut dyn SendFailedHost, ids: Vec<String>) {
 fn enqueue_prompt_as(host: &mut dyn SendFailedHost, mut sent: Sent, write: Write, preparing: bool, first: bool) -> bool {
     sent.operation = match write {
         Write::Send { .. } => Operation::Send,
-        Write::SendMovingHome { .. } => Operation::MovingHome,
         Write::StartAs { directory, .. } => Operation::Start(directory),
         Write::StartInNewWorktree { project, from, branch, .. } => Operation::Worktree { project, from, branch },
         Write::SendFromRevert { .. } => Operation::Revert,

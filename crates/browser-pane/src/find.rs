@@ -419,6 +419,8 @@ impl crate::BrowserHost {
         if can_open_in_engine {
             self.clear_stale_fault_if_empty();
         }
+        let connected = self.is_connected();
+        let ready = self.status() == crate::installer::EngineStatus::Ready;
         let mut prompts = crate::prompts::TabPromptState::default();
         prompts.agent_driven = agent_driven;
         self.tabs.push(crate::client::BrowserTab {
@@ -426,10 +428,12 @@ impl crate::BrowserHost {
             url: url.clone(),
             title: "New tab".into(),
             loading: refused.is_none(),
+            audible: false,
             can_go_back: false,
             can_go_forward: false,
             zoom: 1.0,
             cursor: crate::protocol::CursorKind::Default,
+            scroll_cursor: Default::default(),
             load_error: None,
             favicon: None,
             preview: None,

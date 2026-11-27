@@ -2,29 +2,29 @@
   "generated_at": "2026-11-27",
   "upstream_repo": "anomalyco/opencode",
   "upstream_reference_base": "f6e0c2d0833ffe772035f221fed923e1cd5fb408",
-  "upstream_head": "8ec08f4913531a421a93a1b074ec97e163a2d38b",
+  "upstream_head": "449c128a5b225efcf986201d57519697d8bb7fe1",
   "upstream_pre_window_base": "3751be8138ebcf33343eb3f3d011b32fc814103c",
   "rune_desktop_repo": "anomalyco/opencode-rune",
-  "rune_desktop_head": "3e14a988b",
-  "post_1114_commit_count": 751,
-  "post_1114_in_ledger": 257,
-  "post_1114_skipped": 494,
+  "rune_desktop_head": "cae3029ef",
+  "post_1114_commit_count": 769,
+  "post_1114_in_ledger": 260,
+  "post_1114_skipped": 509,
   "post_1114_skipped_breakdown": {
-    "test-only": 33,
+    "test-only": 34,
     "ci-bench-deps": 26,
-    "docs-site-data": 77,
+    "docs-site-data": 84,
     "tui-only": 32,
-    "cli-acp-only": 13,
-    "server-core-ai-codemode-internal": 313
+    "cli-acp-only": 14,
+    "server-core-ai-codemode-internal": 319
   },
   "pre_1114_carryover_rows": 15,
-  "total_ledger_rows": 278,
+  "total_ledger_rows": 281,
   "status_counts": {
-    "have it": 230,
+    "have it": 239,
     "not applicable": 39,
     "differs on purpose": 1,
-    "partly": 4,
-    "missing": 4
+    "partly": 2,
+    "missing": 0
   },
   "rows": [
     {
@@ -5372,8 +5372,8 @@
       ],
       "summary": "No focus ring round a focused file viewer, tool output region, error details box, What's New or the terminal; the file viewer and the tool output regions are no Tab stop any more (tabIndex -1: a click still focuses them so the keys scroll and search).",
       "size": "XS",
-      "status": "partly",
-      "status_evidence": "opencode-rune #881 (6e508f01): the keyboard's line in a file viewer or diff (crates/opencode-code-view/src/file/view.rs and diff/view.rs line_stop) drew Rune's default ring; it now sets no_focus_ring and shows by the line's hover fill (focus_fill); the terminal screen (features/terminal-surface/src/grid/mod.rs) sets no_focus_ring. Tool output, console and error details are not focusable in ours and What's New has no focus container: no ring, nothing to do. OPEN, owner question (24 Nov): official's viewer is no Tab stop at all; ours keeps one Tab stop per viewer (the cursor line, for commenting by keyboard). Found, not checked: official's tool output and error details take focus on a click so the keys scroll them; ours are not focusable. Ported by reading; run owed (CI build only).",
+      "status": "have it",
+      "status_evidence": "Ported in opencode-rune #881 (6e508f01) and completed in #1375 (8023e5d79, head 8399f8b044, CI run 45918796952 green across guardrails + macOS/Win x64/Win arm64/Linux x64; Linux arm64 skipped): terminal screen (features/terminal-surface/src/grid/mod.rs), file/diff viewer line stops (crates/opencode-code-view/src/{file,diff}/view.rs), tool console bash-scroll & capped tool-output (crates/session-view/src/tools/console.rs), and tool error details (crates/session-view/src/tools/error.rs) are all click-focusable with tab_index(-1) and no_focus_ring (not Tab stops, no focus ring). Official: packages/session-ui/src/{components/file.{tsx,css},components/message-part.css,tools/tool-renderer.tsx}, packages/ui/src/components/error-details.{tsx,css}, packages/gui-plugins/src/terminal/terminal.tsx. Verified headless on Windows x64 PR build (4bd8a89126, run 45916050241), all cases pass: clicking bash-scroll region (tools-shell-long) and error details (tools-error) focuses each with focusVisible=false (zero ring); on Review/Inline diff Tab x3 skips diff lines while clicking a line focuses it with focusVisible=false. Not run: real window, macOS, Linux.",
       "depends_on": "none",
       "risks": "none",
       "workstream": "UPSTREAM",
@@ -5791,8 +5791,8 @@
       ],
       "summary": "In the composer's \"Session location unavailable\" card (a session whose folder is gone), the worktree list is a popover whose search field keeps focus while the pointer moves over rows (it was a menu, whose hovered item took focus); ten or more other worktrees add the search field.",
       "size": "M",
-      "status": "missing",
-      "status_evidence": "Not applicable as ours stands, and not decided: ours has no such card. A session whose folder is gone is moved to its project's main checkout on the next send, with a first line saying so (crates/opencode-kit/src/session_home.rs), where official lets the person choose a worktree or a directory (session/composer/location-missing.tsx, since opencode#56087). Owner question sent 24 Nov: keep ours or port the card; this row follows his answer.",
+      "status": "have it",
+      "status_evidence": "Ported in opencode-rune #1376 (54f5b476f, head 970c5e4070, CI run 45916469768 green across guardrails + macOS/Win x64/Win arm64/Linux x64; Linux arm64 skipped; supersedes draft #1022): Session location unavailable card in composer slot (apps/desktop/src/session/composer/location_missing/{mod,sync,card,view}.rs) with Choose worktree opening the shared worktree dialog (features/switcher/src/project/mod.rs) where the search field keeps focus while hovering rows. Official: packages/app/src/session/composer/location-missing.tsx, new-session/location/{dialog.tsx,machine.ts}. Verified headless on Windows x64 PR build (970c5e4070, run 45916469768), all 3/3 cases pass: --scene location-missing renders Session location unavailable card in composer slot (prompt=false, queue=false); clicking Choose worktree opens shared Search worktrees dialog directly on worktree step (gone folder excluded) with project-switcher-input staying focused on row hover; --scene subagent keeps SubagentBar. Not run: real window, macOS, Linux.",
       "depends_on": "none",
       "risks": "none",
       "workstream": "UPSTREAM"
@@ -5837,8 +5837,8 @@
       ],
       "summary": "The \"Session location unavailable\" card's Choose worktree opens the shared new-session location dialog (its worktree step) instead of a list of its own; the card's own popover, search and machine states for the list are gone, and one string is removed.",
       "size": "M",
-      "status": "missing",
-      "status_evidence": "Part of the card port (UP-CARD, decided 24 Nov under the parity rule): ours has no card yet (crates/opencode-kit/src/session_home.rs moves the session by itself). Port the card from this commit's shape.",
+      "status": "have it",
+      "status_evidence": "Ported in opencode-rune #1376 (54f5b476f, head 970c5e4070, CI run 45916469768 green across guardrails + macOS/Win x64/Win arm64/Linux x64; Linux arm64 skipped; supersedes draft #1022): Choose worktree opens the shared new-session location dialog directly on the project's worktree step (open_worktree_dialog in features/switcher/src/project/mod.rs), removing the old silent auto-move (crates/opencode-kit/src/session_home.rs) and adding Server::move_session + session.moved SSE handling. Official: packages/app/src/new-session/location/{dialog.tsx,machine.ts}, session/composer/location-missing.tsx. Verified headless on Windows x64 PR build (970c5e4070, run 45916469768), all 3/3 cases pass: Choose worktree on --scene location-missing opens shared project-switcher Search worktrees dialog directly on worktree step (feature-01/02/03, reconnect-fix; gone folder excluded) while --scene subagent keeps SubagentBar cleanly. Not run: real window, macOS, Linux.",
       "depends_on": "none",
       "risks": "none",
       "workstream": "UPSTREAM"
@@ -6200,8 +6200,8 @@
       ],
       "summary": "Four gaps of the Consolidated navigation: a middle click on a pinned session unpins it and closes its tab; a pin group's chevron (vertical) and, under Consolidated, a Recent group header's chevron show only on hover or keyboard focus; Home's project picker names the focused server, with the server glyph, in place of All projects when there are several servers and no project is chosen.",
       "size": "S",
-      "status": "partly",
-      "status_evidence": "Ported in opencode-rune #1144 (2e0d7d31), with its four open hover/focus/fade differences closed in #1262 (75cae151) on the Rune pin 5342f14d (rune#2231, rune#2215): a middle click on a pinned session unpins it (apps/desktop/src/shell/tabs/pins.rs), Home's picker names the focused server when no project is chosen (shell/view/home/projects.rs), and a pin group's and Recent group's header chevron and menu button follow official's hover and focus (shell/view/sidebar/pinned_area.rs, recent.rs: 150 ms chevron fade in and out, chevron stays visible while hovering the menu button, keyboard focus on the toggle shows the ring and chevron with no hover fill and no menu button, Recent header has no hover fill and turns its label to base ink on hover). Run headless on Windows x64 CI builds: #1144's middle click and Home picker ran on #1144's build; #1262's 9 cases ran on 0b4db7a00 (run 45711964463) beside before build #1271 278f9aaf38 (29 launches, exit 0), confirming 150 ms chevron fade (0.837 / 0.163 at 60 ms), pointer on menu button keeps chevron and fill, Tab on toggle shows no fill and no menu button, Recent header no fill and base ink on hover, and terminal quote icon label + tooltip. Partly because two differences remain open: (1) a Recent header's words turn to base ink while hovering its Group and sort button where official keeps them muted (packages/app/src/shell/titlebar/recent-sessions.tsx:1201): needs a Rune addition for a member naming its hover group (Rune draft owed); (2) the chevron turns at once on toggle press (0 px diff at 60 ms vs settled in case 7) because the toggle's press calls tx.instant(), where official turns over 150 ms. Not run: a real window, touch, top tabs' pin groups, the Recent arrangement's own grouped header, macOS, Linux.",
+      "status": "have it",
+      "status_evidence": "Ported in opencode-rune #1144 (2e0d7d31), #1262 (75cae151), and completed in #1375 (8023e5d79, head 8399f8b044, CI run 45918796952 green across guardrails + macOS/Win x64/Win arm64/Linux x64; Linux arm64 skipped): middle click unpins pinned sessions, Home picker names focused server, pin/Recent headers fade chevrons over 150 ms, toggle presses omit tx.instant() so group_chevron rotates over 150 ms (apps/desktop/src/shell/view/sidebar/{pinned_area,recent}.rs), and HOVERED_HEADER slot tracks Recent heading pointer hover so hovering Group and sort keeps the heading label muted while keeping the chevron visible. Official: packages/app/src/{home/projects/{region,view}.tsx,shell/titlebar/{pinned-area,recent-sessions,tab-nav}.tsx}. #1144 and #1262 verified headless (9/9 cases on 0b4db7a00); Verified headless on Windows x64 PR build (4bd8a89126, run 45916050241) beside before build (5a027d8785), all cases pass: on sidebar-consolidated-list-grouped, hovering heading turns 'Needs attention' to #fafafaff while hovering sibling sliders button keeps it muted #aeaeaeff and chevron opacity=1 (before: #fafafaff); chevron mid-frame at 60 ms differs from settled by 37 px vs 0 px before (smooth 150 ms rotation). Not run: real window, macOS, Linux.",
       "depends_on": "none",
       "risks": "none",
       "workstream": "UPSTREAM"
@@ -6336,7 +6336,7 @@
       "summary": "The browser's import dialog in two groups: what comes over (Sign-ins, Browsing history) and from which sites: a radio choice 'All sites' (with the count) or 'Only sites I choose', which shows the search and the site list under it with nothing ticked; one box in the list's header ticks or clears every shown site (mixed when some are ticked) in place of the Select all / Select none buttons; the 'Choose sites' disclosure in the footer is gone; a profile picker ('From') shows only where the dialog has several profiles to offer, and a Settings row opens it for its own profile, named in the title with the profile as a badge; a new dialog size 'tall' (480 x 600, fixed top edge); the Settings row's button says 'Import', not 'Import...', and a browser's profile name beside it is a badge.",
       "size": "L",
       "status": "partly",
-      "status_evidence": "Ported in opencode-rune #1202 (56bd7bb4; plugin contract 1.11): the browser Import dialog is organized into two groups (Include: Sign-ins and Browsing history; Sites: All sites with count, or Only sites I choose with search, select-all checkbox and site list), with the profile shown as a badge beside the browser title when opened from a Settings row, and the dialog keeping its top edge when the list opens; Return on a checkbox starts the import. Two older faults were fixed in the same change: Settings > Browser now lists profiles on its first open without leaving the page, and working copies of another browser's cookie database left behind if the app ended during a read are claimed by an OS lock file and swept once after launch (official packages/gui-plugins/src/browser/profile/index.ts:102, database.ts:62-86). Official: packages/gui-plugins/src/browser/site-chooser.tsx, settings.tsx, panel.tsx. Run headless on Windows x64 CI builds under sealed scratch roots (wall clock only, every process environment verified under the root before the first tap): cases 7, 1, 2, 3 (400 sites, tall and short windows) and 6 (Return on checkbox) held on b7edbacba beside before build cc991c6505; on the merged head 0e3df708a beside before build 278f9aaf38: shared strings, press on the words of Only sites I choose (140 wide, label 116) and press beside, first-open frame check (16.9 ms before, 41.0 ms new; an earlier 2.3 s frame did not recur), sweep cases 8-10 (planted copy+lock removed; no-lock copy waits 10 min; real lock swept after quick end; mid-read Cookies copy not caught, case 8 stands for it), and all three shared-file samples (Add extension framed list, address field, /rename row). Not run: case 4 (pane offer) and case 5 (cookie import). Partly because three named differences from official remain open (follow-ups owed): (1) the From picker is a menu button rather than a select (needs a select in the plugin kit, select.css:22-45); (2) the Import button while importing uses the kit's loading look rather than a disabled primary button with a 14 pt spinner (site-chooser.tsx:682-694); (3) list rows are list items with checkboxes rather than a listbox of options (site-chooser.tsx:570-591).",
+      "status_evidence": "Ported in opencode-rune #1202 (56bd7bb4; plugin contract 1.11): the browser Import dialog is organized into two groups (Include: Sign-ins and Browsing history; Sites: All sites with count, or Only sites I choose with search, select-all checkbox and site list), with the profile shown as a badge beside the browser title when opened from a Settings row, and the dialog keeping its top edge when the list opens; Return on a checkbox starts the import. Two older faults were fixed in the same change: Settings > Browser now lists profiles on its first open without leaving the page, and working copies of another browser's cookie database left behind if the app ended during a read are claimed by an OS lock file and swept once after launch (official packages/gui-plugins/src/browser/profile/index.ts:102, database.ts:62-86). Official: packages/gui-plugins/src/browser/site-chooser.tsx, settings.tsx, panel.tsx. Run headless on Windows x64 CI builds under sealed scratch roots (wall clock only, every process environment verified under the root before the first tap): cases 7, 1, 2, 3 (400 sites, tall and short windows) and 6 (Return on checkbox) held on b7edbacba beside before build cc991c6505; on the merged head 0e3df708a beside before build 278f9aaf38: shared strings, press on the words of Only sites I choose (140 wide, label 116) and press beside, first-open frame check (16.9 ms before, 41.0 ms new; an earlier 2.3 s frame did not recur), sweep cases 8-10 (planted copy+lock removed; no-lock copy waits 10 min; real lock swept after quick end; mid-read Cookies copy not caught, case 8 stands for it), and all three shared-file samples (Add extension framed list, address field, /rename row). Not run: case 4 (pane offer) and case 5 (cookie import). Partly because three named differences from official remain open (follow-ups owed): (1) the From picker is a menu button rather than a select (needs a select in the plugin kit, select.css:22-45); (2) the Import button while importing uses the kit's loading look rather than a disabled primary button with a 14 pt spinner (site-chooser.tsx:682-694); (3) list rows are list items with checkboxes rather than a listbox of options (site-chooser.tsx:570-591). Closing all 3 remaining gaps in opencode-rune #1385 (head d01fd2487d, CI running, contract 1.12): adds ui.select (rune_kit::Select + Menu::picker) for the From profile picker, renders the busy Import primary button disabled with a 14 pt ink-colored spinner and not-allowed cursor, and switches the site chooser to role=listbox with role=option rows (selected=chosen) and presentation-only checkboxes.",
       "depends_on": "none",
       "risks": "none",
       "workstream": "UPSTREAM"
@@ -6453,8 +6453,8 @@
       ],
       "summary": "In the Review and file panels, Shift+F10 with the focus on the file tree toggle opens the 'Sidebar position' menu (Left, Right) under the toggle, at its start corner; Escape or a choice gives the focus back to the toggle, and the arrow keys walk into the submenu, where Return picks. The file tree's filter field keeps its own menu. A patch to the menu library keeps a submenu's first item from taking the focus back after a key moved it.",
       "size": "XS",
-      "status": "missing",
-      "status_evidence": "Run on a build of dev on the Rune pin d5c7a5ad (opencode-rune #1192's own Windows x64 PR build, head cc991c65; headless, the app's fixture file, no server), the toggle focused by pressing it twice: Shift+F10 opens the menu with its one row, Sidebar position, and the focus is on that row; Escape closes it and the toggle has the focus again, with its ring; Shift+F10, Down, Right opens the submenu with Left checked and the focus on it, and Down, Return puts the tree on the right, both menus gone and the focus on the toggle. What differs, and keeps this missing: the menu opens at the window's bottom-left corner, over the composer, where official opens it at the toggle's own corner (its left and bottom, its right in a right-to-left page: packages/session-ui/src/v2/components/session-file-panel-v2.tsx:101-115). The app passes the point it is given through unchanged (apps/desktop/src/plugin_host/native/sidebar.rs:150-158, crates/opencode-ui/src/popup/view.rs:62-64), so the point Rune handed it was the window's corner, where Rune's rule as written gives the focused element's left and bottom (Rune runtime/input/secondary.rs:446-498, selection/links.rs:203, at the pin); why it did not is not determined: a pass on another focused control decides whether every keyboard menu opens there. Not run: Shift+F10 in the filter field, which has its own menu; a right-to-left layout; a real window. Official's test: packages/app/component-tests/panel-sidebar-side.spec.ts:62-91.",
+      "status": "have it",
+      "status_evidence": "Ported in opencode-rune #1374 (e12d405ab, head 68529d4c09, CI run 45915758641 green across guardrails + macOS/Win x64/Win arm64/Linux x64; Linux arm64 skipped): apps/desktop/src/plugin_host/native/sidebar.rs anchors Shift+F10 / Menu key (tx.by_keys()) on chrome::sidebar_toggle directly to PopupAnchor::Key(toggle_key) with Align::Start (toggle's start-bottom corner, left in LTR / right in RTL), while the sidebar body ignores tx.by_keys() so the filter field keeps its own menu. Official: packages/session-ui/src/v2/components/session-file-panel-v2.tsx:35,96-117. Verified headless on Windows x64 PR build (68529d4c09, run 45915758641) beside before build (5a027d8785), all 3/3 cases pass (5/5 launches exit 0): Shift+F10 on focused review-tree-toggle opens Sidebar position anchored at its start-bottom corner [480,136,146,32], Escape and Shift+F10+Down+Right+Down+Enter move sidebar Right (x 480 -> 1228) and return focus to toggle, and Shift+F10 in review-filter does not open Sidebar position. Not run: real window, macOS, Linux.",
       "depends_on": "none",
       "risks": "none",
       "workstream": "UPSTREAM"
@@ -6871,8 +6871,8 @@
       ],
       "summary": "Adds an experimental Automations view (Settings > Experimental toggle + Automations sidebar/titlebar entry + /automations route) showing each server's scheduled/event automations, where they run, which session they wake, and pause/resume/delete controls.",
       "size": "L",
-      "status": "missing",
-      "status_evidence": "Not yet ported (also includes #66635 93e053ff89 follow-up passing the Home automations entry into projects view as props). Official: packages/app/src/automations/{format,model,route,source,view}.*, settings/experimental/experimental.tsx, shell/{routes/routes,tabs/tabs,titlebar/titlebar}.tsx, home/{route,projects/*}.tsx, runtime/i18n/en.ts.",
+      "status": "have it",
+      "status_evidence": "Ported in opencode-rune #1377 (506b5822e, head b2d53dd655, CI run 45919467456 green across guardrails + macOS/Win x64/Win arm64/Linux x64; Linux arm64 skipped): adds opencode-kit automation model/client, Settings > Experimental > Automations toggle + search + 51 i18n keys, Route::Automations + AutomationsFeature split list/inspector + delete confirmation dialog + sidebar/titlebar/Home entry points (including #66635 93e053ff89 prop-passing shape) + --scene automations/automations-empty/automations-off. Official: packages/app/src/automations/{format,model,route,source,view}.*, settings/experimental/experimental.tsx, shell/{routes/routes,tabs/tabs,titlebar/titlebar}.tsx, home/{route,projects/*}.tsx, runtime/i18n/en.ts. Post-merge bulk headless verification queued.",
       "depends_on": "none",
       "risks": "none",
       "workstream": "UPSTREAM"
@@ -6945,6 +6945,86 @@
       "status": "have it",
       "status_evidence": "Shipped in opencode-rune #1329 (5fc2a6de9, head de9079d0a2, CI run 45866130904 green; Linux arm64 skipped): both turns::script_output_for_blocks (crates/session-view/src/turns/mod.rs) and rhythm::edges_of script_changes (crates/session-view/src/timeline/rhythm.rs) match only Block::Calls { kind: Calls::Files } and never Block::Group, so grouped changes never steal a preceding script's Output row and keep M block separation. Official: packages/session-ui/src/timeline/{script-output,timeline-row}.ts.",
       "depends_on": "UP-255",
+      "risks": "none",
+      "workstream": "UPSTREAM"
+    },
+    {
+      "id": "UP-258",
+      "window": "post-1120",
+      "pr": 66650,
+      "sha": "82d8fc5bec",
+      "title": "feat(session-ui): count a script's steps instead of the script with full_codemode",
+      "merged": "2026-11-26",
+      "packages": [
+        "session-ui"
+      ],
+      "main_files": [
+        "packages/session-ui/src/timeline/facts.ts",
+        "packages/session-ui/src/timeline-next/tools/activity-label.ts",
+        "packages/session-ui/src/timeline-next/tools/context-group.tsx",
+        "packages/session-ui/src/tools/context-group-label.ts"
+      ],
+      "summary": "With full_codemode enabled, activity group headers count each execute script's nested steps (mapping Bun.write to edit and Bun.file to read, ignoring other Bun calls, letting edit lead only once changed files land) instead of counting the script itself as a command.",
+      "size": "S",
+      "status": "have it",
+      "status_evidence": "Ported in opencode-rune #1340 (c5b343e41, head 9ce13a37a7, CI run 45886401880 green across guardrails + macOS/Win x64/Win arm64/Linux x64; Linux arm64 skipped): adds activity::activity_with(steps, script_steps) and script_step_calls in crates/session-view/src/activity/label.rs (Bun.write -> edit, Bun.file -> read, ignores other Bun calls, non-background shells, fallback to execute when empty, edit leads only once files land), passes s.full_codemode(session) in turns/view.rs, and hashes metadata.toolCalls in timeline/mod.rs group_hash. Official: packages/session-ui/src/timeline/facts.ts, timeline-next/tools/{activity-label.ts,context-group.tsx}, tools/{context-group-label.ts,tool-renderer.tsx}. Verified headless on Windows x64 PR build (b113398d10, run 45883612173) beside before build (de9079d0a2), all 3/3 cases pass (4/4 launches exit 0): tools-execute-codemode-on reads 'Edited main.rs - 1 read' (before: 'Edited main.rs - 1 command'), tools-execute-codemode-bun reads 'Explored 1 file, 1 search', tools-execute-codemode-off reads 'Ran 1 command'. Not run: real window, macOS, Linux.",
+      "depends_on": "UP-255",
+      "risks": "none",
+      "workstream": "UPSTREAM"
+    },
+    {
+      "id": "UP-259",
+      "window": "post-1120",
+      "pr": 64797,
+      "sha": "b15f4e9301",
+      "title": "feat(app): bundle OpenMono as the default mono font",
+      "merged": "2026-11-26",
+      "packages": [
+        "app",
+        "ui",
+        "gui-plugins"
+      ],
+      "main_files": [
+        "packages/app/src/index.css",
+        "packages/app/src/settings/model.tsx",
+        "packages/app/src/settings/about/notices/notices.ts",
+        "packages/app/src/runtime/i18n/en.ts",
+        "packages/ui/src/styles/theme.css",
+        "packages/gui-plugins/src/terminal/terminal.tsx"
+      ],
+      "summary": "Replaces IBM Plex Mono and JetBrainsMono Nerd Font Mono with bundled OpenMono (Regular, Bold, Italic, and Nerd Fonts icons) as the default code and terminal mono font, updating Settings > Appearance defaults, About typeset copy, and OpenMono + Nerd Fonts third-party notices.",
+      "size": "M",
+      "status": "have it",
+      "status_evidence": "Ported in opencode-rune #1346 (088e3beee, head 14fec3dcb2, CI run 45897512979 green across guardrails + macOS/Win x64/Win arm64/Linux x64; Linux arm64 skipped): bundles reconstructed full non-ligature 1-cell OpenMono-{Regular,Bold,Italic,Icons}.ttf faces + OpenMono-OFL.txt (removing IBMPlexMono-* and JetBrainsMonoNerdFontMono-*), updates apps/desktop/src/lib.rs, scripts/web.ps1, appearance FACE_WEIGHTS/defaults/legacy settings migration, terminal cell metrics & fallback, plugin appearance.font('mono'), all 62 official locales typeset copy + en.json notice strings, THIRD_PARTY_NOTICES.md Section 1 (OpenMono + Nerd Fonts v3.5.1 + collapsible licenses), and fixes pre-existing UTF-8 slicing panic in notices.rs. Official: packages/app/src/{index.css,settings/model.tsx,settings/about/notices/notices.ts,runtime/i18n/*.ts}, packages/ui/src/styles/theme.css, packages/gui-plugins/src/terminal/terminal.tsx. Verified headless on Windows x64 PR build beside before build (b113398d10), all 4/4 cases pass: Appearance shows OpenMono placeholders, About reads 'Typeset in Inter and OpenMono', Third-party notices opens exit 0 with OpenMono + Nerd Fonts v3.5.1 (0 IBM Plex/JetBrains hits), code block and Terminal/Pane render cleanly in OpenMono with single-cell Nerd Font glyphs. Not run: real window, macOS, Linux.",
+      "depends_on": "none",
+      "risks": "none",
+      "workstream": "UPSTREAM"
+    },
+    {
+      "id": "UP-260",
+      "window": "post-1120",
+      "pr": 66531,
+      "sha": "d382c66c6d",
+      "title": "feat(ui): add Sakura, Espresso, Witch Hazel, E-Ink, and Dune themes",
+      "merged": "2026-11-26",
+      "packages": [
+        "ui"
+      ],
+      "main_files": [
+        "packages/ui/src/theme/context.tsx",
+        "packages/ui/src/theme/v2/resolve.ts",
+        "packages/ui/src/theme/themes/dune.json",
+        "packages/ui/src/theme/themes/eink.json",
+        "packages/ui/src/theme/themes/espresso.json",
+        "packages/ui/src/theme/themes/poimandres.json",
+        "packages/ui/src/theme/themes/sakura.json",
+        "packages/ui/src/theme/themes/witchhazel.json"
+      ],
+      "summary": "Adds five new built-in themes (Sakura, Espresso, Witch Hazel, E-Ink, and Dune), updates the Poimandres light palette, and refines the v2 light neutral scale and monochrome hue-scale resolver.",
+      "size": "S",
+      "status": "have it",
+      "status_evidence": "Ported in opencode-rune #1357 (d1489639c, head 46a8006530, CI run 45904428317 green across guardrails + macOS/Win x64/Win arm64/Linux x64; Linux arm64 skipped): regenerated apps/desktop/assets/themes.json (47 themes total) via apps/desktop/tools/themes.ts against official d382c66c6d packages/ui/src/theme, adding Dune, E-Ink, Espresso, Sakura, and Witch Hazel, updating Poimandres light palette, and applying v2/resolve.ts light neutral & monochrome hue scales. Official: packages/ui/src/theme/{context.tsx,v2/resolve.ts,themes/{dune,eink,espresso,poimandres,sakura,witchhazel}.json}. Verified headless on Windows x64 PR build (5a027d8785, run 45901077585) beside before build (14fec3dcb2), all 2/2 cases pass (11/11 launches exit 0): Theme picker lists 47 items (OpenCode first, rest alphabetical) including all 5 new themes (before: 42 items), and all 5 new palettes plus updated Poimandres light render distinctly while oc-2 dark stays unchanged. Not run: real window, macOS, Linux.",
+      "depends_on": "none",
       "risks": "none",
       "workstream": "UPSTREAM"
     }

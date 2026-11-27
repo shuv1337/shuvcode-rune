@@ -341,6 +341,19 @@ impl App {
             session.title = title.to_owned();
             done.renamed = true;
         }
+        // The session runs in another folder now, and maybe another project (`session.moved` in
+        // `packages/client/src/solid/data.ts`): its header, its panels and its location card follow.
+        if ty == "session.moved" && let Some(directory) = data["location"]["directory"].as_str()
+            && let Some(session) = self.sessions.iter_mut().find(|s| s.id == sid) {
+            if session.directory != directory {
+                session.directory = directory.to_owned();
+                done.info = true;
+            }
+            if let Some(project) = data["projectID"].as_str().filter(|p| !p.is_empty() && *p != session.project) {
+                session.project = project.to_owned();
+                done.info = true;
+            }
+        }
         // A desktop attached to the session's browser, or the last one let it go (`data.ts`).
         if ty == "session.permissions"
             && let Some(session) = self.sessions.iter_mut().find(|s| s.id == sid) {
@@ -488,6 +501,8 @@ impl App {
             self.selected_landed(&sid, selected);
         }
         changed |= done.info;
+        // What the tab saved of its session (its folder) follows the move.
+        if ty == "session.moved" && done.info { self.note_tab_titles(); }
         if matches!(ty, "session.archived" | "session.unarchived") { self.session_search.invalidate(); }
         if ty == "session.text.delta" && self.shows_transcript(&sid) {
             crate::telemetry::streamed(&self.window.id, &sid, data);
@@ -545,7 +560,7 @@ impl App {
             let active_dir = match &*self.route {
                 Route::Session { id, .. } => self.session(id).map(|i| i.directory.as_str()),
                 Route::Draft(_) => Some(self.draft_dir()),
-                Route::Home => None,
+                Route::Home | Route::Automations => None,
             };
             if loc.is_none() || loc == crate::start_location::server_directory(self) || loc == active_dir {
                 let now = *self.clock;

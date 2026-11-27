@@ -101,8 +101,14 @@ impl Source {
     }
 }
 
+/// Maximum `data:` URL length decoded for a plugin image (16 MiB encoded).
+const MAX_DATA_URL_BYTES: usize = 16 << 20;
+
 /// A `data:[<type>][;base64],<data>` URL's bytes.
 fn data_url(url: &str) -> Result<Vec<u8>, String> {
+    if url.len() > MAX_DATA_URL_BYTES {
+        return Err("data URL exceeds 16 MiB limit".into());
+    }
     use base64::Engine as _;
     use base64::engine::{DecodePaddingMode, GeneralPurpose, GeneralPurposeConfig};
     // As browsers read them: padding optional, whitespace ignored.

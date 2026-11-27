@@ -262,6 +262,10 @@ impl ProjectSwitcherHost for App {
     fn handle_shortcut(&mut self, ev: &KeyEvent, tx: &mut Tx) -> bool {
         self.shortcut(ev, tx)
     }
+
+    fn worktree_picked(&mut self, pick: WorktreePick, tx: &mut Tx) {
+        crate::location_missing::worktree_picked(self, pick, tx);
+    }
 }
 
 impl App {

@@ -355,8 +355,9 @@ fn vertical_group(s: &App, p: &Pal, g: &PinGroup, nav_order: &[String], show_hin
         .center_y()
         .radius(6.0)
         .focus_inset(p)
-        .on_press_tx(move |s: &mut App, tx: &mut Tx| {
-            tx.instant();
+        // Commit without `tx.instant()` so the chevron rotates smoothly over 150 ms (`CHEVRON`,
+        // `packages/app/src/shell/titlebar/pinned-area.tsx:376`, `opencode#66265`).
+        .on_press_tx(move |s: &mut App, _tx: &mut Tx| {
             pins::update(s, |d| d.toggle_group(&toggle_id));
         })
         // A right-click opens the menu where the row's `⋯` does, as official's `Menu` (`bottom-end`).
@@ -418,8 +419,9 @@ fn horizontal_group(s: &App, p: &Pal, g: &PinGroup, nav_order: &[String], show_h
         .radius(6.0)
         .focus_inset(p)
         .hover(if menu_open { Color::TRANSPARENT } else { p.hover })
-        .on_press_tx(move |s: &mut App, tx: &mut Tx| {
-            tx.instant();
+        // Commit without `tx.instant()` so the chevron rotates smoothly over 150 ms (`CHEVRON`,
+        // `packages/app/src/shell/titlebar/pinned-area.tsx:376`, `opencode#66265`).
+        .on_press_tx(move |s: &mut App, _tx: &mut Tx| {
             pins::update(s, |d| d.toggle_group(&toggle_id));
         })
         // Top tabs open it under the group's start (official's hidden `Menu.Trigger`, `bottom-start`).

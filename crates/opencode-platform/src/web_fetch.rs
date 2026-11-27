@@ -134,7 +134,7 @@ fn resolve_redirect(current: &str, location: &str) -> Option<String> {
 fn fetch(url: &str) -> Result<Vec<u8>, String> {
     static AGENT: OnceLock<ureq::Agent> = OnceLock::new();
     let agent = AGENT.get_or_init(|| {
-        let config = ureq::Agent::config_builder()
+        let config = net_trust::agent_config()
             .timeout_global(Some(Duration::from_secs(15)))
             .http_status_as_error(false)
             .max_redirects(0)

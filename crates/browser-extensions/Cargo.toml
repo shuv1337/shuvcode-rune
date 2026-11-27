@@ -16,6 +16,7 @@ sha2 = "0.10"
 crc32fast = "1"
 flate2 = "1"
 icu_normalizer = { version = "2", default-features = false, features = ["compiled_data"] }
+net-trust = { path = "../net-trust" }
 ring = "0.17"
 ureq = { workspace = true, features = ["rustls", "platform-verifier"] }
 

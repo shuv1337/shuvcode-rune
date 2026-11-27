@@ -1085,7 +1085,7 @@
   "settings.about.otherContributor.other": "{{count}} egyebek",
   "settings.about.tagline": "Az AI nem tud nagyszerű szoftvert készíteni nélküled",
   "settings.about.trademark": "A OpenCode a Anomaly Innovations, Inc. bejegyzett védjegye.",
-  "settings.about.typeset": "Betűkészlet Inter és IBM Plex Mono nyelven",
+  "settings.about.typeset": "Betűkészlet Inter és OpenMono nyelven",
   "settings.about.version": "{{version}} verzió",
   "settings.about.website": "www.opencode.ai",
   "settings.about.writtenByNames": "Írta: {{names}}",

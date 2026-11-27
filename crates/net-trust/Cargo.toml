@@ -1,0 +1,20 @@
+[package]
+name = "net-trust"
+version = "0.0.1"
+description = "The roots every HTTPS request and WebSocket of the app trusts: the compiled-in list and the operating system's store"
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+rustls = { version = "0.23", default-features = false, features = ["std"] }
+rustls-native-certs = "0.8"
+ureq = { workspace = true, features = ["rustls"] }
+webpki-root-certs = "1"
+
+# A page's requests are the browser's own, with its own certificate check.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+ureq-web = { path = "../ureq-web" }
+
+[lints]
+workspace = true

@@ -8,6 +8,7 @@ mod comes_back;
 mod exec;
 pub mod express;
 mod frames;
+mod hold;
 mod session;
 mod start_gate;
 mod suppression;
@@ -119,6 +120,7 @@ pub struct BrowserRpcState {
     ref_counter: u64,
     /// App-wide single active trace owner (`Some(host_id)` while tracing; official `shared.trace`).
     pub(super) active_trace_host: Option<u64>,
+    holds: hold::RpcHoldManager,
 }
 
 impl Default for BrowserRpcState {
@@ -141,6 +143,7 @@ impl Default for BrowserRpcState {
             next_diag_scope: 1,
             ref_counter: 0,
             active_trace_host: None,
+            holds: hold::RpcHoldManager::default(),
         }
     }
 }
@@ -479,9 +482,9 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
 
     // 4. Start newly fetched commands & step in-flight commands without blocking the UI thread.
     // Move `sessions` temporarily out of `Slot` so executors can mutably borrow `App`.
-    let (mut sessions, mut ref_counter, waker) = {
+    let (mut sessions, mut holds, mut ref_counter, waker) = {
         let st = app.kernel.slots.get_mut(&BROWSER_RPC);
-        (std::mem::take(&mut st.sessions), st.ref_counter, st.waker.clone())
+        (std::mem::take(&mut st.sessions), std::mem::take(&mut st.holds), st.ref_counter, st.waker.clone())
     };
 
     for (key, conn_id, req_id, res) in fetched_commands {
@@ -566,9 +569,13 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
         }
     }
 
+    if let Some(w) = holds.sync(app, &mut sessions, now) {
+        earliest_wake = Some(earliest_wake.map_or(w, |cur| cur.min(w)));
+    }
     {
         let st = app.kernel.slots.get_mut(&BROWSER_RPC);
         st.sessions = sessions;
+        st.holds = holds;
         st.ref_counter = ref_counter;
     }
     apply_batch_effects(app, tick_effects, Some(tx));

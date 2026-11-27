@@ -18,6 +18,10 @@ fn toggle_tab_groups(s: &mut dyn SettingsHost) {
     change_settings(s, |x| x.tab_groups = Some(!x.tab_groups()));
 }
 
+fn toggle_automations(s: &mut dyn SettingsHost) {
+    change_settings(s, |x| x.automations = Some(!x.automations()));
+}
+
 fn toggle_sidebar_sections(s: &mut dyn SettingsHost) {
     change_settings(s, |x| x.sidebar_sections = Some(!x.sidebar_sections()));
 }
@@ -62,6 +66,16 @@ pub fn view<H: SettingsHost + PopupHost + 'static>(s: &H, p: &Pal) -> El {
                 t!("settings.experimental.row.sidebarOrganize.title"),
                 t!("settings.experimental.row.sidebarOrganize.description"),
                 organize(s, p),
+            ),
+        ),
+        (
+            "settings-automations",
+            setting(
+                p,
+                "settings-automations",
+                t!("settings.experimental.row.automations.title"),
+                t!("settings.experimental.row.automations.description"),
+                switch(p, "automations-switch", st.automations()).on_press(|s: &mut H| toggle_automations(s)),
             ),
         ),
         (

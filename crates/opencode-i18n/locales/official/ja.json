@@ -1085,7 +1085,7 @@
   "settings.about.otherContributor.other": "他{{count}}人",
   "settings.about.tagline": "AIはあなたなしで素晴らしいソフトウェアを構築することはできません",
   "settings.about.trademark": "OpenCodeはAnomaly Innovations, Inc.の登録商標です。",
-  "settings.about.typeset": "InterおよびIBM Plex Monoのタイプセット",
+  "settings.about.typeset": "InterおよびOpenMonoのタイプセット",
   "settings.about.version": "バージョン{{version}}",
   "settings.about.website": "www.opencode.ai",
   "settings.about.writtenByNames": "{{names}}によって書かれました",

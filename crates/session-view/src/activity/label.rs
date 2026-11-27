@@ -65,13 +65,73 @@ pub fn work_events(steps: &[Step]) -> Vec<Event> {
 /// over reading (`modePriority`).
 const PRIORITY: [Mode; 4] = [Mode::Edit, Mode::Run, Mode::Tool, Mode::Explore];
 
+/// One counted call inside a group: either a direct tool call or, under `full_codemode`,
+/// a nested step inside an `execute` script (`stepFacts`, `facts.ts:315-350`, `opencode#66650`).
+struct Counted<'s> {
+    raw_name: &'s str,
+    input: &'s serde_json::Value,
+    metadata: &'s serde_json::Value,
+    rule: rules::Rule,
+    from_script: bool,
+}
+
+/// Expands an `execute` script's `metadata.toolCalls` into direct-equivalent calls
+/// (`stepFacts`, `packages/session-ui/src/timeline/facts.ts:307-350`, `opencode#66650`):
+/// `Bun.write` -> `edit`, `Bun.file` -> `read`, other `Bun` calls count nothing, and
+/// Code Mode's shell has no background.
+fn script_step_calls<'s>(metadata: &'s serde_json::Value) -> Vec<Counted<'s>> {
+    static EMPTY: serde_json::Value = serde_json::Value::Null;
+    let Some(calls) = metadata["toolCalls"].as_array() else { return Vec::new() };
+    let mut out = Vec::new();
+    for call in calls {
+        let Some(tool) = call["tool"].as_str() else { continue };
+        let Some(status) = call["status"].as_str() else { continue };
+        if !matches!(status, "running" | "completed" | "error") {
+            continue;
+        }
+        let input = call.get("input").filter(|v| v.is_object()).unwrap_or(&EMPTY);
+        let mapped = if tool == "Bun" {
+            match input["method"].as_str() {
+                Some("write") => "edit",
+                Some("file") => "read",
+                _ => continue,
+            }
+        } else {
+            tool
+        };
+        // Code Mode's shell has no background (`facts.ts:343`), so evaluate rules with empty input.
+        let rule = rules::rule(mapped, &EMPTY);
+        out.push(Counted { raw_name: mapped, input, metadata: &EMPTY, rule, from_script: true });
+    }
+    out
+}
+
 /// A group's activity label, or `None` for one with neither calls nor work that runs on.
 pub fn activity<'s>(steps: &[Step<'s>]) -> Option<Activity> {
+    activity_with(steps, false)
+}
+
+/// Like [`activity`]; with `script_steps` (`full_codemode`, `opencode#66650`), a script counts
+/// as the calls it made rather than as itself, and an edit step leads only once its files have
+/// landed (`activity-label.ts:53-59`).
+pub fn activity_with<'s>(steps: &[Step<'s>], script_steps: bool) -> Option<Activity> {
     use opencode_i18n::{plural, t};
-    let tools: Vec<(&'s str, &'s serde_json::Value, &'s serde_json::Value, rules::Rule)> = steps.iter().filter_map(|st| match st {
-        Step::Tool { name, input, metadata, .. } => Some((*name, *input, *metadata, rules::rule(name, input))),
-        _ => None,
-    }).filter(|(.., r)| r.layout != Layout::Event).collect();
+    let mut tools: Vec<Counted<'s>> = Vec::new();
+    for st in steps {
+        let Step::Tool { name, input, metadata, .. } = st else { continue };
+        let rule = rules::rule(name, input);
+        if rule.layout == Layout::Event {
+            continue;
+        }
+        if script_steps && rule.name == "execute" {
+            let expanded = script_step_calls(metadata);
+            if !expanded.is_empty() {
+                tools.extend(expanded);
+                continue;
+            }
+        }
+        tools.push(Counted { raw_name: name, input, metadata, rule, from_script: false });
+    }
     let (buckets, _) = events::summarize_shells(&work_events(steps));
     let launched: Vec<String> = buckets.iter().map(|b| events::launch_count(b.verb, b.count)).collect();
     // Each path once, in the order first seen.
@@ -82,13 +142,13 @@ pub fn activity<'s>(steps: &[Step<'s>]) -> Option<Activity> {
             files.push(p);
         }
     };
-    for t in tools.iter().filter(|t| t.3.mode == Mode::Edit) {
-        let changed: Vec<&'s str> = t.2["files"].as_array().into_iter().flatten().filter_map(|f| f["file"].as_str()).collect();
-        let paths = if changed.is_empty() { crate::tools::path(t.1).into_iter().collect() } else { changed };
+    for t in tools.iter().filter(|t| !t.from_script && t.rule.mode == Mode::Edit) {
+        let changed: Vec<&'s str> = t.metadata["files"].as_array().into_iter().flatten().filter_map(|f| f["file"].as_str()).collect();
+        let paths = if changed.is_empty() { crate::tools::path(t.input).into_iter().collect() } else { changed };
         paths.into_iter().for_each(&mut add);
     }
-    // A script counts once, as a command; the files it changed count as files where they are
-    // placed in the group, after the rest (`activityFacts`), and name it as edits do.
+    // The files a script changed count as files where they are placed in the group, after direct
+    // edits (`activityFacts`), and name the group as edits do.
     for st in steps {
         if let &Step::Change { file, .. } = st
             && let Some(p) = file["file"].as_str()
@@ -96,7 +156,15 @@ pub fn activity<'s>(steps: &[Step<'s>]) -> Option<Activity> {
             add(p);
         }
     }
-    let Some(mode) = PRIORITY.into_iter().find(|m| tools.iter().any(|t| t.3.mode == *m) || (*m == Mode::Edit && !files.is_empty())) else {
+    // Counting a script's steps, an edit step leads only once its files have landed
+    // (`packages/session-ui/src/timeline-next/tools/activity-label.ts:53-59`).
+    let Some(mode) = PRIORITY.into_iter().find(|m| {
+        if *m == Mode::Edit && script_steps {
+            !files.is_empty()
+        } else {
+            tools.iter().any(|t| t.rule.mode == *m) || (*m == Mode::Edit && !files.is_empty())
+        }
+    }) else {
         let first = buckets.first()?;
         return Some(Activity {
             verb: events::verb_word(first.verb).to_owned(),
@@ -104,11 +172,11 @@ pub fn activity<'s>(steps: &[Step<'s>]) -> Option<Activity> {
             others: launched[1..].to_vec(),
         });
     };
-    let of = |m: Mode| tools.iter().filter(move |t| t.3.mode == m);
-    let count = |names: &[&str]| tools.iter().filter(|t| names.contains(&t.3.name)).count();
+    let of = |m: Mode| tools.iter().filter(move |t| t.rule.mode == m);
+    let count = |names: &[&str]| tools.iter().filter(|t| names.contains(&t.rule.name)).count();
     let mut reads: Vec<&str> = Vec::new();
-    for t in tools.iter().filter(|t| t.3.name == "read") {
-        if let Some(p) = crate::tools::path(t.1)
+    for t in tools.iter().filter(|t| t.rule.name == "read") {
+        if let Some(p) = crate::tools::path(t.input)
             && !reads.contains(&p)
         {
             reads.push(p);
@@ -135,7 +203,7 @@ pub fn activity<'s>(steps: &[Step<'s>]) -> Option<Activity> {
     let commands: Vec<String> = (runs > 0).then(|| plural!("ui.timeline.activity.commands", runs)).into_iter().collect();
     let mut used: Vec<&str> = Vec::new();
     for t in of(Mode::Tool) {
-        let title = crate::turns::tool_title(rules::current_name(t.0));
+        let title = crate::turns::tool_title(rules::current_name(t.raw_name));
         if !used.contains(&title) {
             used.push(title);
         }

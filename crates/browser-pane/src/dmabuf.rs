@@ -90,16 +90,20 @@ pub(crate) struct PoolInfo {
 /// One connection's buffer sets, by tab id, and its own sender.
 pub(crate) struct Pools {
     tabs: HashMap<u64, (u64, Vec<Arc<DmabufBuffer>>)>,
+    /// Last intentionally dropped pool id per tab (on hide/close), so an already-in-flight
+    /// `DmabufFrame` for that pool replies `FrameRead` without falsely tripping `DmabufFailed`.
+    forgotten: HashMap<u64, u64>,
     tx: Sender<HostMsg>,
 }
 
 impl Pools {
     pub(crate) fn new(tx: Sender<HostMsg>) -> Self {
-        Self { tabs: HashMap::new(), tx }
+        Self { tabs: HashMap::new(), forgotten: HashMap::new(), tx }
     }
 
     pub(crate) fn add(&mut self, info: PoolInfo, fds: Vec<OwnedFd>) {
         self.tabs.remove(&info.tab_id);
+        self.forgotten.remove(&info.tab_id);
         if fds.len() != info.buffers as usize {
             return fail(&self.tx, format!("pool {} came with {} of {} descriptors", info.pool, fds.len(), info.buffers));
         }
@@ -124,6 +128,10 @@ impl Pools {
             return;
         };
         let Some(buffer) = self.tabs.get(&tab_id).filter(|(id, _)| *id == pool).and_then(|(_, b)| b.get(slot as usize)) else {
+            if self.forgotten.get(&tab_id) == Some(&pool) {
+                tx.send(HostMsg::FrameRead { tab_id, pool, frame_id }).ok();
+                return;
+            }
             return fail(&tx, format!("frame {frame_id} names buffer {slot} of pool {pool}, which the app doesn't have"));
         };
         let frame = Dmabuf::new(buffer.clone()).on_read(move |read| match read {
@@ -137,8 +145,17 @@ impl Pools {
         }
     }
 
-    /// The tab's buffers go: it closed, or its frames come as BGRA now.
+    /// The tab's buffers go while it hides (or switches to BGRA), keeping `forgotten` so an
+    /// already-in-flight `DmabufFrame` for that pool replies `FrameRead` cleanly.
     pub(crate) fn forget(&mut self, tab_id: u64) {
+        if let Some((pool_id, _)) = self.tabs.remove(&tab_id) {
+            self.forgotten.insert(tab_id, pool_id);
+        }
+    }
+
+    /// The tab closed permanently: drop both live buffers and any `forgotten` tombstone.
+    pub(crate) fn close(&mut self, tab_id: u64) {
         self.tabs.remove(&tab_id);
+        self.forgotten.remove(&tab_id);
     }
 }

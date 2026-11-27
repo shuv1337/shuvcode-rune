@@ -123,6 +123,7 @@ pub(super) struct SessionAttachment {
     pub pending_close_tabs: Vec<u64>,
     pub agent_tab_id: Option<String>,
     pub active_commands: Vec<ActiveCommand>,
+    pub hold_touched: Vec<u64>,
     pub diag_scope_seed: u64,
 }
 
@@ -161,6 +162,7 @@ impl SessionAttachment {
             pending_close_tabs: Vec::new(),
             agent_tab_id: None,
             active_commands: Vec::new(),
+            hold_touched: Vec::new(),
             diag_scope_seed,
         }
     }

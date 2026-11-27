@@ -1085,7 +1085,7 @@
   "settings.about.otherContributor.other": "其他{{count}}人",
   "settings.about.tagline": "没有您，人工智能无法构建出色的软件",
   "settings.about.trademark": "OpenCode是Anomaly Innovations, Inc.的注册商标。",
-  "settings.about.typeset": "Inter和IBM Plex Mono中的排版",
+  "settings.about.typeset": "Inter和OpenMono中的排版",
   "settings.about.version": "版本{{version}}",
   "settings.about.website": "www.opencode.ai",
   "settings.about.writtenByNames": "作者：{{names}}",

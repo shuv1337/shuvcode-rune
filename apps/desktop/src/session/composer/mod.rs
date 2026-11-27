@@ -4,6 +4,7 @@ pub mod dictation;
 pub mod dropzone;
 pub mod free_limit;
 pub mod line_comments;
+pub mod location_missing;
 pub mod mentions;
 pub mod pickers;
 pub mod prompt_history;

@@ -1085,7 +1085,7 @@
   "settings.about.otherContributor.other": "기타 {{count}}명",
   "settings.about.tagline": "AI는 당신 없이는 훌륭한 소프트웨어를 만들 수 없습니다",
   "settings.about.trademark": "OpenCode는 Anomaly Innovations, Inc.의 등록 상표입니다.",
-  "settings.about.typeset": "Inter 및 IBM Plex Mono의 조판",
+  "settings.about.typeset": "Inter 및 OpenMono의 조판",
   "settings.about.version": "버전 {{version}}",
   "settings.about.website": "www.opencode.ai",
   "settings.about.writtenByNames": "작성자: {{names}}",

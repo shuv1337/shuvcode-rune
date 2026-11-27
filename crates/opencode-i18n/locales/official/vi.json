@@ -1085,7 +1085,7 @@
   "settings.about.otherContributor.other": "{{count}} người khác",
   "settings.about.tagline": "AI không thể xây dựng phần mềm tuyệt vời nếu không có bạn",
   "settings.about.trademark": "OpenCode là nhãn hiệu đã đăng ký của Anomaly Innovations, Inc.",
-  "settings.about.typeset": "Bộ sắp chữ trong Inter và IBM Plex Mono",
+  "settings.about.typeset": "Bộ sắp chữ trong Inter và OpenMono",
   "settings.about.version": "Phiên bản {{version}}",
   "settings.about.website": "www.opencode.ai",
   "settings.about.writtenByNames": "Được viết bởi {{names}}",

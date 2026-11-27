@@ -117,7 +117,9 @@ pub(crate) fn handle_typed_cdp_call(
             return reply(false, json!({ "message": e }));
         }
         t.cdp_ledger.lock().unwrap().app_attached = true;
-        crate::input_fps::boost(tab_id, &t.host);
+        if t.render_mode.is_awake() {
+            crate::input_fps::boost(tab_id, &t.host);
+        }
         if let Err(msg) = t
             .input_guard
             .lock()

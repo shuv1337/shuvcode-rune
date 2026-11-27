@@ -50,13 +50,19 @@ pub fn tool_output<'a>(status: &ToolStatus, metadata: &'a Value) -> Option<&'a s
     }
 }
 
-/// Keeps the text items of a tool result's `content` in `metadata`.
+/// Keeps the text items of a tool result's `content` in `metadata`, dropping any duplicate
+/// streamed `metadata["output"]` now superseded by the finished result (`tool_output` reads
+/// `TOOL_OUTPUT` first for completed calls).
 pub(super) fn keep_tool_output(metadata: &mut Value, content: &Value) {
     let texts: Vec<&str> = content.as_array().into_iter().flatten().filter(|c| c["type"] == "text").filter_map(|c| c["text"].as_str()).collect();
     if texts.is_empty() {
         return;
     }
-    object(metadata)[TOOL_OUTPUT] = texts.join("\n").into();
+    let m = object(metadata);
+    m[TOOL_OUTPUT] = texts.join("\n").into();
+    if let Some(obj) = m.as_object_mut() {
+        obj.remove("output");
+    }
 }
 
 /// Where a composer shell command's call is marked in its `metadata` (see [`shell_message`]).

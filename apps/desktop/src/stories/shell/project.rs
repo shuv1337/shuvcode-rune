@@ -104,6 +104,7 @@ fn story_view(s: &App, p: &Pal) -> El {
         Route::Draft(_) => view::draft_page(s, p, panel_w),
         Route::Session { id, .. } => view::session_page(s, p, id),
         Route::Home => view::home(s, p, [panel_w, 0.0], [0.0, 0.0]),
+        Route::Automations => crate::automations::view::page(s, p, [panel_w, 0.0]),
     };
     row()
         .key("story-open-project")

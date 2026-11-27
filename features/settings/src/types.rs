@@ -237,8 +237,8 @@ impl TextRenderer {
     }
 }
 
-/// The Terminal font knob's choices, which the setting picks.
-pub const TERMINAL_FONTS: [&str; 4] = ["Commit Mono", "IBM Plex Mono", "SF Mono", "JetBrains Mono"];
+/// The Terminal font knob's choices, which the setting picks (Desktop's default OpenMono at index 3, `opencode#64797`).
+pub const TERMINAL_FONTS: [&str; 4] = ["Commit Mono", "IBM Plex Mono", "SF Mono", "OpenMono"];
 
 /// A font a row offers: its name, and the family list behind Rune's sans or mono slot.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -255,15 +255,15 @@ const fn font(name: &'static str, family: &'static str) -> Font {
 pub const UI_FONTS: [Font; 4] = [
     font("Inter", "Inter"),
     font("SF Pro", "System Font, Inter"),
-    font("IBM Plex Mono", "IBM Plex Mono, Inter"),
+    font("OpenMono", "OpenMono, Inter"),
     font("Commit Mono", "CommitMono, Inter"),
 ];
 
-/// The code font row's choices, Desktop's default (IBM Plex Mono) first.
+/// The code font row's choices, Desktop's default (OpenMono, `opencode#64797`) first.
 pub const CODE_FONTS: [Font; 3] = [
-    font("IBM Plex Mono", "IBM Plex Mono"),
-    font("Commit Mono", "CommitMono, IBM Plex Mono"),
-    font("SF Mono", "ui-monospace, IBM Plex Mono"),
+    font("OpenMono", "OpenMono, OpenMono Icons"),
+    font("Commit Mono", "CommitMono, OpenMono, OpenMono Icons"),
+    font("SF Mono", "ui-monospace, OpenMono, OpenMono Icons"),
 ];
 
 /// The index of the font named `name` in `fonts`, the default when there's none.

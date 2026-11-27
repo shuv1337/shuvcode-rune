@@ -163,7 +163,7 @@ impl Hex {
         body: &[u8],
         wait: Duration,
     ) -> Result<Value, String> {
-        let agent: ureq::Agent = ureq::Agent::config_builder()
+        let agent: ureq::Agent = net_trust::agent_config_for(&self.base)
             .timeout_global(Some(wait))
             .http_status_as_error(false)
             .build()
@@ -248,7 +248,7 @@ impl Hex {
 
     /// The stream's events, from its start until it ends. Read them on their own thread.
     pub fn stream_events(&self, s: &Stream) -> Result<StreamEvents, String> {
-        let agent: ureq::Agent = ureq::Agent::config_builder()
+        let agent: ureq::Agent = net_trust::agent_config_for(&self.base)
             .timeout_connect(Some(Duration::from_secs(5)))
             .http_status_as_error(false)
             .build()

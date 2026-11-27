@@ -1,3 +1,4 @@
+pub mod automations;
 pub mod browser;
 pub mod code_view;
 pub mod egg;

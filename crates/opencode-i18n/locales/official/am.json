@@ -1085,7 +1085,7 @@
   "settings.about.otherContributor.other": "{{count}} ሌሎች",
   "settings.about.tagline": "ያለ እርስዎ AI ምርጥ ሶፍትዌር መገንባት አይችልም",
   "settings.about.trademark": "OpenCode የAnomaly Innovations, Inc. የተመዘገበ የንግድ ምልክት ነው።",
-  "settings.about.typeset": "በInter እና IBM Plex Mono ተሰድሯል",
+  "settings.about.typeset": "በInter እና OpenMono ተሰድሯል",
   "settings.about.version": "ስሪት {{version}}",
   "settings.about.website": "www.opencode.ai",
   "settings.about.writtenByNames": "የተጻፈው በ{{names}}",

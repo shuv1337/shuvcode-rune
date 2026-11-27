@@ -130,9 +130,21 @@ pub fn console<S: TimelineHost>(s: &S, p: &Pal, session: &str, id: &str, command
         stack = stack.child(section(s, p, session, id, Part { name: "result", fill: p.layer1, label: opencode_i18n::t!("ui.message.copyOutput"), rule: command.is_some() }, words));
     }
     // `bash-scroll`: one region at most `MAX_H` tall scrolling command and output together, with
-    // no scroll bar (`message-part.css:815-824`).
+    // no scroll bar (`message-part.css:727-730,815-824`, `tool-renderer.tsx:1988`, `opencode#65785`):
+    // click-focusable for keyboard scrolling (`tab_index(-1)`), not a Tab stop, and draws no ring.
     let viewport = crate::scroller::scroller("scroll").hidden(
-        col().w_full().max_h(MAX_H).shrink().min_h(0.0).corners([inner; 4]).clip_corners([inner; 4]),
+        col()
+            .w_full()
+            .max_h(MAX_H)
+            .shrink()
+            .min_h(0.0)
+            .corners([inner; 4])
+            .clip_corners([inner; 4])
+            .focusable(true)
+            .tab_index(-1)
+            .no_focus_ring()
+            .role("region")
+            .label_static(opencode_i18n::t!("ui.scrollView.ariaLabel")),
         stack,
     );
     card.child(viewport)
@@ -179,7 +191,19 @@ pub fn output_view<S: TimelineHost>(p: &Pal, session: &str, id: &str, raw: &str,
 /// `content` in a region at most [`MAX_H`] tall that scrolls the rest, with no scroll bar, as Desktop hides it
 /// (`message-part.css:746-755`).
 pub fn capped(content: El) -> El {
-    crate::scroller::scroller("scroll").hidden(col().w_full().max_h(MAX_H), content)
+    // `tool-output` (`tool-renderer.tsx:1725,1758,1796`, `message-part.css:727-730`, `opencode#65785`):
+    // click-focusable for keyboard scrolling (`tab_index(-1)`), not a Tab stop, and draws no ring.
+    crate::scroller::scroller("scroll").hidden(
+        col()
+            .w_full()
+            .max_h(MAX_H)
+            .focusable(true)
+            .tab_index(-1)
+            .no_focus_ring()
+            .role("region")
+            .label_static(opencode_i18n::t!("ui.scrollView.ariaLabel")),
+        content,
+    )
 }
 
 /// One section of a console.

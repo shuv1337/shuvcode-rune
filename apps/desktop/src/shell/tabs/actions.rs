@@ -206,6 +206,10 @@ impl App {
     /// page.
     pub fn select_tab(&mut self, key: &str, tx: &mut Tx) {
         let Some(tab) = self.tab(key).cloned() else { return self.open(key, tx) };
+        let changing = self.current_tab().as_deref() != Some(tab.uid().as_str());
+        if changing && (tab.is_draft() || tab.server != *crate::servers::runtime::active(self)) {
+            crate::shell::memory_reclaim::on_tab_switched(self);
+        }
         // The window works against the tab's server from here on (`servers::runtime`).
         crate::servers::runtime::switch(self, &tab.server);
         if !tab.is_draft() {
@@ -261,7 +265,7 @@ impl App {
         let shown = self.current_tab().as_deref() == Some(uid.as_str());
         let next_visible = if shown { crate::tabs::groups::next_visible_after_closing(self, &uid) } else { None };
         let tab = self.tabs.remove(i);
-        let (id, server) = (tab.id.clone(), tab.server.clone());
+        let (id, server, closed_session) = (tab.id.clone(), tab.server.clone(), tab.kind == TabKind::Session);
         match tab.kind {
             TabKind::Session => {
                 // Its history goes where its server's sessions are known: the window's own fields
@@ -306,6 +310,9 @@ impl App {
                     tx.blur();
                 }
             }
+        }
+        if closed_session {
+            crate::shell::memory_reclaim::on_tab_closed(self, &server, &id, shown);
         }
         self.save_tabs();
     }
@@ -371,7 +378,7 @@ impl App {
                 let root = self.root_of(id);
                 self.tabs.iter().find(|t| t.id == root && !t.is_draft() && t.server == *server).map(Tab::uid)
             }
-            Route::Home => None,
+            Route::Home | Route::Automations => None,
         }
     }
 

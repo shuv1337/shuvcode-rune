@@ -543,6 +543,6 @@ fn theme(lua: &Lua, vmx: &Rc<Vmx>, t: &Table) -> mlua::Result<()> {
         let byte = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
         Ok(format!("#{:02x}{:02x}{:02x}{:02x}", byte(c.r), byte(c.g), byte(c.b), byte(c.a)))
     })?;
-    method(lua, t, "Font", |_, family: String| Ok(if family == "mono" { "IBM Plex Mono" } else { "Inter" }))?;
+    method(lua, t, "Font", |_, family: String| Ok(if family == "mono" { "OpenMono" } else { "Inter" }))?;
     lazy_signals(lua, vmx, t, "Theme", &["Changed"])
 }

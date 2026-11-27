@@ -138,7 +138,7 @@ pub fn chips<S: ComposerHost>(s: &S, p: &Pal) -> Option<El> {
     for f in files {
         let id = identity(f);
         let store = s.media_store();
-        let (w, body) = match store.image(f).filter(|img| img.error().is_none()) {
+        let (w, body) = match store.image_sized(f, 160.0).filter(|img| img.error().is_none()) {
             Some(img) => {
                 let thumb = el()
                     .key("attachment-thumb")

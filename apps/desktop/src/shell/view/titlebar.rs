@@ -20,6 +20,7 @@ const LIGHTS_W: f32 = 74.0;
 pub(crate) const NAV_HOME: &str = "shell-nav-home";
 pub(crate) const NAV_SEARCH: &str = "shell-nav-search";
 pub(crate) const NAV_NEW: &str = "shell-nav-new";
+pub(crate) const NAV_AUTOMATIONS: &str = "shell-nav-automations";
 
 /// The row, where this layout and platform keep one.
 pub(super) fn titlebar(s: &App, p: &Pal, cx: &mut Cx<App>) -> Option<El> {
@@ -64,7 +65,8 @@ pub(super) fn titlebar(s: &App, p: &Pal, cx: &mut Cx<App>) -> Option<El> {
     // Consolidated navigation searches inline on Home (`titlebar.tsx`, #64668).
     let proto = s.settings.navigation_prototype();
     let search = (!proto).then(|| search_button(p));
-    let nav = row().key("titlebar-nav").gap(2.0).mr(-2.0).center_y().child(home_button(s, p)).children(search);
+    let automations = crate::automations::available(s).then(|| automations_button(s, p));
+    let nav = row().key("titlebar-nav").gap(2.0).mr(-2.0).center_y().child(home_button(s, p)).children(search).children(automations);
     let pinned_bar = super::sidebar::pinned_area::horizontal(s, p);
     // Under Settings › Group tabs each project's or server's tabs stand together, the tabs with
     // no project after them (`grouped.horizontal()`, `titlebar.tsx:922`), a 16 × 1 divider
@@ -148,6 +150,14 @@ fn home_button(s: &App, p: &Pal) -> El {
         .on_press_tx(|s: &mut App, tx: &mut Tx| {
             s.toggle_home(tx);
         })
+}
+
+fn automations_button(s: &App, p: &Pal) -> El {
+    let open = *s.route == Route::Automations && !s.settings_open();
+    nav_button(p, "automations", t!("automations.title"), &crate::automations::CLOCK, open)
+        .help(t!("automations.title"))
+        .matched(NAV_AUTOMATIONS).matched_crop().motion(GLIDE)
+        .on_press_tx(|s: &mut App, tx: &mut Tx| crate::automations::toggle(s, tx))
 }
 
 fn search_button(p: &Pal) -> El {

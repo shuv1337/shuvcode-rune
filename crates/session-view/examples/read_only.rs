@@ -113,7 +113,7 @@ fn main() {
     let spec = AppSpec {
         scenes: SCENES,
         fonts: rune_theme_opencode::FONTS,
-        families: ("Inter", "IBM Plex Mono"),
+        families: ("Inter", "OpenMono"),
         setup: Some(setup_replay),
         poll: Some(poll),
         on_key: Some(on_key),

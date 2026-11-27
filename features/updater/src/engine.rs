@@ -84,11 +84,14 @@ impl Engine {
         if cache.url != url {
             *cache = ManifestCache { url: url.to_owned(), ..ManifestCache::default() };
         }
-        let mut request = Self::agent(manifest_timeout(), feed::requires_https(url)).get(url).header("User-Agent", &self.user_agent()).header("Accept", "application/json");
-        if let (Some(etag), Some(_)) = (&cache.etag, &cache.body) {
-            request = request.header("If-None-Match", etag);
-        }
-        let mut resp = request.call().map_err(|e| e.to_string())?;
+        let mut resp = Self::call(manifest_timeout(), feed::requires_https(url), |agent| {
+            let mut request = agent.get(url).header("User-Agent", &self.user_agent()).header("Accept", "application/json");
+            if let (Some(etag), Some(_)) = (&cache.etag, &cache.body) {
+                request = request.header("If-None-Match", etag);
+            }
+            request.call()
+        })
+        .map_err(|e| e.to_string())?;
         match resp.status().as_u16() {
             304 => cache.body.clone().ok_or_else(|| "HTTP 304 for a manifest never received".to_owned()),
             200..300 => {
@@ -102,8 +105,23 @@ impl Engine {
         }
     }
 
-    fn agent(timeout: Duration, https_only: bool) -> ureq::Agent {
-        ureq::Agent::config_builder()
+    /// `send` through an agent with the operating system's certificate check; when that check
+    /// refuses the server (or the handshake fails), once more with the root list compiled into the
+    /// app, the one every build before `net_trust` checked with alone. An update check must never
+    /// fail where the build before it passed: a build that can't verify its feed could never fetch
+    /// the build that repairs it.
+    fn call<T>(timeout: Duration, https_only: bool, send: impl Fn(ureq::Agent) -> Result<T, ureq::Error>) -> Result<T, ureq::Error> {
+        match send(Self::agent(timeout, https_only, false)) {
+            Err(e) if net_trust::is_certificate_refusal(&e) => {
+                eprintln!("updater: the system's certificate check refused the update server ({e}); trying the built-in root list");
+                send(Self::agent(timeout, https_only, true))
+            }
+            other => other,
+        }
+    }
+
+    fn agent(timeout: Duration, https_only: bool, builtin: bool) -> ureq::Agent {
+        (if builtin { net_trust::builtin_agent_config() } else { net_trust::agent_config() })
             .timeout_global(Some(timeout))
             .http_status_as_error(false)
             .https_only(https_only)
@@ -162,10 +180,7 @@ impl Engine {
         if !feed::allowed_update_url(&target.url) {
             return Err("refusing insecure download URL".into());
         }
-        let mut resp = Self::agent(DOWNLOAD_TIMEOUT, feed::requires_https(&target.url))
-            .get(&target.url)
-            .header("User-Agent", &self.user_agent())
-            .call()
+        let mut resp = Self::call(DOWNLOAD_TIMEOUT, feed::requires_https(&target.url), |agent| agent.get(&target.url).header("User-Agent", &self.user_agent()).call())
             .map_err(|e| format!("download failed: {e}"))?;
         let code = resp.status().as_u16();
         if !(200..300).contains(&code) {

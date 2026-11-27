@@ -180,7 +180,7 @@ pub(super) fn probe_result(info: &Info, timeout: Duration) -> (Option<LocalServi
         return (None, false);
     };
     let endpoint = Endpoint { url: origin.clone(), password: info.password.clone() };
-    let agent: ureq::Agent = ureq::Agent::config_builder()
+    let agent: ureq::Agent = net_trust::agent_config_for(&origin)
         .timeout_global(Some(timeout))
         .http_status_as_error(false)
         .max_redirects(0)

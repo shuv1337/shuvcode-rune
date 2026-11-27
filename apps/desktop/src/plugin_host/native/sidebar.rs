@@ -6,7 +6,7 @@
 //! (`createPanelSidebar`, `review-panel-v2`), which ⌘\ toggles.
 
 use opencode_i18n::t;
-use rune::{Cursor, Drag, El, KeyEvent, Phase, PointerPress, Tx, col, el, row};
+use rune::{Align, Cursor, Drag, El, KeyEvent, Phase, PointerPress, PopupAnchor, Tx, col, el, row};
 use rune_luau::NodeArgs;
 
 use super::p;
@@ -144,18 +144,25 @@ fn toggle(s: &mut App, tx: &mut Tx) {
     crate::plugin_host::bump();
 }
 
-/// "Sidebar position" on a right-click of the sidebar or its toggle
-/// (`SessionFilePanelV2SideMenu`): Left and Right, the physical edges, so right is the end edge
-/// left to right and the start edge right to left. A text field in the sidebar keeps its own menu.
+/// "Sidebar position" on a right-click of the sidebar or its toggle, or `Shift+F10` on the
+/// toggle (`SessionFilePanelV2SideMenu`, `packages/session-ui/src/v2/components/session-file-panel-v2.tsx:96-117`,
+/// `opencode#66372`): Left and Right, the physical edges, so right is the end edge left to right
+/// and the start edge right to left. A text field in the sidebar keeps its own menu.
 fn open_side_menu(s: &mut App, at: PointerPress, tx: &mut Tx) {
+    open_side_menu_at(s, at.into(), tx);
+}
+
+fn open_side_menu_at(s: &mut App, anchor: PopupAnchor, tx: &mut Tx) {
     let rtl = opencode_i18n::direction() == opencode_i18n::Direction::Rtl;
     let right = (s.workspace_panes.panel_sidebar.side == Side::End) != rtl;
     let edges = Menu::new(t!("ui.sessionReviewV2.sidebarPosition"))
         .item(Item::new("left", t!("ui.sessionReviewV2.sidebarPosition.left")).radio(!right))
         .item(Item::new("right", t!("ui.sessionReviewV2.sidebarPosition.right")).radio(right));
-    let menu = Menu::new(t!("ui.sessionReviewV2.sidebarPosition")).submenu("position", t!("ui.sessionReviewV2.sidebarPosition"), edges);
+    let menu = Menu::new(t!("ui.sessionReviewV2.sidebarPosition"))
+        .align(Align::Start)
+        .submenu("position", t!("ui.sessionReviewV2.sidebarPosition"), edges);
     tx.instant();
-    popup::open(s, menu, at, tx, move |s: &mut App, picked, tx| {
+    popup::open(s, menu, anchor, tx, move |s: &mut App, picked, tx| {
         let right = match picked {
             Some("left") => false,
             Some("right") => true,
@@ -203,7 +210,22 @@ pub fn view(a: &mut NodeArgs) -> Result<El, String> {
             Side::End => [0.0, 0.0, 0.0, 1.0],
         };
         let sidebar = opened.then(|| {
-            col().key(format!("{id}-sidebar")).w(w).h_full().fill(pal.bg_base).border_sides(edge, pal.border).border_layout().on_secondary_press(open_side_menu).child(side)
+            // Only pointer right-clicks open the sidebar-position menu on the sidebar body;
+            // keyboard `Shift+F10` inside the sidebar (such as the filter field) keeps its own menu
+            // (`packages/session-ui/src/v2/components/session-file-panel-v2.tsx:35,96`, `opencode#66372`).
+            col()
+                .key(format!("{id}-sidebar"))
+                .w(w)
+                .h_full()
+                .fill(pal.bg_base)
+                .border_sides(edge, pal.border)
+                .border_layout()
+                .on_secondary_press(|s: &mut App, at: PointerPress, tx: &mut Tx| {
+                    if !tx.by_keys() {
+                        open_side_menu(s, at, tx);
+                    }
+                })
+                .child(side)
         });
         // On the end edge the body is `row-reverse`: tree, toggle, border and handle all swap sides.
         body = match at {
@@ -224,7 +246,16 @@ pub fn view(a: &mut NodeArgs) -> Result<El, String> {
             .min_h(0.0)
             .fill(pal.bg_base)
             .child(body)
-            .child(chrome::sidebar_toggle(&pal, toggle_key, opened, locked, at == Side::End, toggle).on_secondary_press(open_side_menu))
+            .child(
+                chrome::sidebar_toggle(&pal, toggle_key, opened, locked, at == Side::End, toggle)
+                    // Keyboard `Shift+F10` / Menu key anchors directly to the toggle's start-bottom
+                    // corner (`opencode#66372`, `session-file-panel-v2.tsx:96-117`), while pointer
+                    // right-click opens at the pointer.
+                    .on_secondary_press(move |s: &mut App, at: PointerPress, tx: &mut Tx| {
+                        let anchor = if tx.by_keys() { PopupAnchor::Key(toggle_key.to_owned()) } else { at.into() };
+                        open_side_menu_at(s, anchor, tx);
+                    }),
+            )
     })
     .ok_or_else(|| "ui.panelSidebar draws only in a render".into())
 }

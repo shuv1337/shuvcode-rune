@@ -1085,7 +1085,7 @@
   "settings.about.otherContributor.other": "{{count}} अन्य",
   "settings.about.tagline": "आपके बिना AI बेहतरीन सॉफ़्टवेयर नहीं बना सकता",
   "settings.about.trademark": "OpenCode, Anomaly Innovations, Inc. का पंजीकृत ट्रेडमार्क है।",
-  "settings.about.typeset": "Inter और IBM Plex Mono में अक्षर-संयोजन",
+  "settings.about.typeset": "Inter और OpenMono में अक्षर-संयोजन",
   "settings.about.version": "संस्करण {{version}}",
   "settings.about.website": "www.opencode.ai",
   "settings.about.writtenByNames": "{{names}} द्वारा लिखित",

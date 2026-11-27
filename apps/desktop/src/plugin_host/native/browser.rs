@@ -599,6 +599,7 @@ pub fn version(app: &App) -> u64 {
     for t in app.workspace_panes.browser.host.tabs() {
         if let Some(d) = &t.device { (&d.preset, d.width, d.height, d.scale.map(f32::to_bits)).hash(&mut h); }
         (t.id, &t.url, &t.title, t.loading, t.can_go_back, t.can_go_forward, t.zoom.to_bits(), t.inspecting, &t.load_error, &t.favicon, &t.refusal, t.rejected).hash(&mut h);
+        (t.cursor as u8).hash(&mut h);
         t.preview.map(|p| p as u8).hash(&mut h);
         t.prompts.hash_state(&mut h);
         t.find.hash_state(&mut h);
@@ -694,6 +695,7 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
     if let Some(next) = app.workspace_panes.browser.devtools.values().map(|p| p.deadline).min() { tx.wake_after(next.saturating_duration_since(now).max(Duration::from_millis(25))); }
     // A cookie import or Clear browsing data fails at its deadline even when nothing else wakes the app.
     if let Some(next) = app.cookie_jobs_deadline() { tx.wake_after(next.saturating_duration_since(now).max(Duration::from_millis(25))); }
+    if let Some(next) = app.browser_visibility_wake() { tx.wake_after(next.saturating_duration_since(now).max(Duration::from_millis(25))); }
     let picks: Vec<_> = if app.workspace_panes.browser.host.has_picked() { app.workspace_panes.browser.host.drain_picked_elements().collect() } else { Vec::new() };
     for pick in picks {
         app.open_browser_element_comment(pick.clone());

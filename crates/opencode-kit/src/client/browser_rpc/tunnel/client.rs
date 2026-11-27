@@ -180,7 +180,8 @@ pub fn open_authenticated_websocket(
     cfg.read_buffer_size = 64 * 1024;
     cfg.write_buffer_size = 64 * 1024;
 
-    match tungstenite::client_tls_with_config(req, tcp, Some(cfg), None) {
+    let tls = ws_url.starts_with("wss:");
+    match tungstenite::client_tls_with_config(req, tcp, Some(cfg), tls.then(net_trust::rustls_client_config).flatten().map(tungstenite::Connector::Rustls)) {
         Ok((ws, _resp)) => Ok(ws),
         Err(HandshakeError::Failure(err)) => Err(classify_ws_handshake_error(err)),
         Err(HandshakeError::Interrupted(_)) => Err(TunnelUpgradeError::new(

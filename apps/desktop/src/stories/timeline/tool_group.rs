@@ -223,6 +223,43 @@ fn codemode_scene(s: &mut App, full_codemode: bool, separate: bool) {
     }
 }
 
+/// Headless verification scene for `opencode#66650`: a `full_codemode` script with `Bun.file`,
+/// `grep`, and an ignored `Bun.sleep` step renders its group header as "Explored 1 file, 1 search".
+fn codemode_bun_scene(s: &mut App) {
+    crate::stories::scenes::open_scene(s);
+    s.finish_stream();
+    let session = crate::stories::sid(s);
+    let dir = s.session(&session).map(|i| i.directory.clone()).filter(|d| !d.is_empty());
+    crate::session::meta::flags::set_fixture(s, dir, "full_codemode", true);
+    let call = Part::Tool {
+        id: "call_exec_bun".into(),
+        name: "execute".into(),
+        status: ToolStatus::Completed,
+        title: String::new(),
+        input: serde_json::json!({ "code": "await Bun.file(\"Cargo.toml\").text();" }),
+        files: vec![],
+        metadata: serde_json::json!({
+            "toolCalls": [
+                { "tool": "Bun", "status": "completed", "input": { "method": "file", "path": "Cargo.toml" } },
+                { "tool": "Bun", "status": "completed", "input": { "method": "sleep" } },
+                { "tool": "grep", "status": "completed", "input": { "pattern": "session-view" } }
+            ],
+            "output": "done"
+        }),
+    };
+    let reply = Assistant {
+        id: "msg_zzcodemode_bun".into(),
+        completed: Some(1),
+        parts: vec![call],
+        ..Default::default()
+    };
+    if let Some(t) = s.transcripts.get_mut(&session)
+        && !t.messages.iter().any(|m| m.id() == reply.id)
+    {
+        t.messages.push(Message::Assistant(reply));
+    }
+}
+
 rune_register::register!(crate::stories::scenes::SCENE_LIST: crate::stories::scenes::Scene = [
     ("tools", |s| tour(s, None, &[])),
     ("tools-list", |s| tour(s, Some("c-call_list_tour"), &["tool:call_list_tour"])),
@@ -246,6 +283,7 @@ rune_register::register!(crate::stories::scenes::SCENE_LIST: crate::stories::sce
     ("tools-execute-codemode-off", |s| codemode_scene(s, false, false)),
     ("tools-execute-codemode-on", |s| codemode_scene(s, true, false)),
     ("tools-execute-codemode-standalone", |s| codemode_scene(s, true, true)),
+    ("tools-execute-codemode-bun", |s| codemode_bun_scene(s)),
     ("tools-running", tour_running),
     ("tools-shell-link", shell_link),
 ]);

@@ -25,7 +25,7 @@ pub(crate) use crate::shell::{
 #[allow(unused_imports)]
 pub(crate) use crate::session::{
     composer::{
-        add_selection, attachments, dictation, dropzone, free_limit, line_comments, mentions, pickers,
+        add_selection, attachments, dictation, dropzone, free_limit, line_comments, location_missing, mentions, pickers,
         prompt_history, quote, quote::cards as quote_cards, slash, suggestions, undo,
     },
     events,

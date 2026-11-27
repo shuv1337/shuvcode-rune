@@ -15,11 +15,48 @@ use crate::palette::Pal;
 // (rune-kit's `Preview`: zoom, pan, keys); Escape, the close button or a click on the backdrop
 // shrinks it back into its thumbnail.
 
+/// Explicit promotion state from the already-ready thumbnail to the on-demand full-res image.
+pub(crate) enum Resolution {
+    Decoding { full: Image, fallback: Image },
+    Ready(Image),
+}
+
+impl Resolution {
+    pub(crate) fn new(full: Image, fallback: Image) -> Self {
+        if full.is_ready() {
+            if full.error().is_none() { Self::Ready(full) } else { Self::Ready(fallback) }
+        } else {
+            Self::Decoding { full, fallback }
+        }
+    }
+
+    /// Advances `Decoding` -> `Ready` once `full` settles. True when the displayed image changed.
+    fn poll(&mut self) -> bool {
+        let Self::Decoding { full, fallback } = self else { return false };
+        if !full.is_ready() {
+            return false;
+        }
+        let next = if full.error().is_none() { full.clone() } else { fallback.clone() };
+        *self = Self::Ready(next);
+        true
+    }
+
+    fn shown(&self) -> &Image {
+        match self {
+            Self::Decoding { fallback, .. } => fallback,
+            Self::Ready(img) => img,
+        }
+    }
+}
+
 pub struct Viewing {
     /// The thumbnail's `El::matched` id.
     pub(crate) id: String,
     pub(crate) name: String,
-    pub(crate) image: Image,
+    /// Full-resolution image promotion state (shows thumbnail until full decode lands).
+    pub(crate) resolution: Resolution,
+    /// Natural pixel dimensions from the header so fit/zoom math is exact before full decode lands.
+    pub(crate) natural: Option<[u32; 2]>,
     /// What the open image's right-click menu acts on.
     pub(crate) dragged: Dragged,
     /// The gallery it was opened from, which ← and → step through.
@@ -82,7 +119,22 @@ pub fn opens<S: TimelineHost>(s: &S, thumb: El, held: El, strip: Strip, image: I
     let (name, dragged) = (f.name.clone(), Dragged::File(f.clone()));
     let thumb = super::menu::on_image::<S>(draggable::<S>(thumb, dragged.clone()), dragged.clone(), message);
     thumb.matched(id.clone()).token_motion(flight(s)).on_press_tx(move |s: &mut S, tx: &mut Tx| {
-        open(s, Viewing { id: id.clone(), name: name.clone(), image: image.clone(), dragged: dragged.clone(), strip: Some(strip.clone()) }, tx);
+        let store = s.media_store();
+        let f = &strip.files[strip.at];
+        let full = store.image_full(f).unwrap_or_else(|| image.clone());
+        let natural = store.natural_size(f);
+        open(
+            s,
+            Viewing {
+                id: id.clone(),
+                name: name.clone(),
+                resolution: Resolution::new(full, image.clone()),
+                natural,
+                dragged: dragged.clone(),
+                strip: Some(strip.clone()),
+            },
+            tx,
+        );
     })
 }
 
@@ -97,8 +149,11 @@ pub fn view_image<S: TimelineHost>(s: &mut S, key: &str, files: &[Attachment], i
 /// The viewer on the strip's open image, when it's loaded.
 fn viewing<S: TimelineHost>(s: &S, strip: Strip) -> Option<Viewing> {
     let f = strip.files.get(strip.at)?;
-    let image = s.media_store().image(f).filter(|img| img.error().is_none())?;
-    Some(Viewing { id: strip.id(), name: f.name.clone(), image, dragged: Dragged::File(f.clone()), strip: Some(strip) })
+    let store = s.media_store();
+    let fallback = store.image(f).filter(|img| img.error().is_none())?;
+    let full = store.image_full(f).unwrap_or_else(|| fallback.clone());
+    let natural = store.natural_size(f);
+    Some(Viewing { id: strip.id(), name: f.name.clone(), resolution: Resolution::new(full, fallback), natural, dragged: Dragged::File(f.clone()), strip: Some(strip) })
 }
 
 /// ← and →: the gallery's previous or next picture, fitted, stopping at either end (Desktop's
@@ -133,10 +188,13 @@ pub fn shown(size: Option<[u32; 2]>, w: f32, h: f32) -> [f32; 4] {
 
 /// Rebuilds changed clip controls and steps the open image's zoom glide.
 pub fn poll<S: TimelineHost>(s: &mut S, now: f64, tx: &mut Tx) -> bool {
-    // Touch the tracked host store only when a clip changes or a glide is running.
+    // Touch the tracked host store only when a clip changes, a full-res lightbox decode lands,
+    // or a zoom glide is running.
     let clips = s.media_store().videos.poll(s.active_session_id(), tx);
     if clips { let _ = s.media_store_mut(); }
-    clips | (s.media_store().zoom.gliding() && s.media_store_mut().zoom.poll(now, tx))
+    let promoted = matches!(s.media_store().viewing.as_ref().map(|v| &v.resolution), Some(Resolution::Decoding { full, .. }) if full.is_ready())
+        && s.media_store_mut().viewing.as_mut().is_some_and(|v| v.resolution.poll());
+    clips | promoted | (s.media_store().zoom.gliding() && s.media_store_mut().zoom.poll(now, tx))
 }
 
 fn close<S: TimelineHost>(s: &mut S, _: &mut Tx) {
@@ -166,7 +224,12 @@ pub fn viewer<S: TimelineHost>(s: &S, p: &Pal, cx: &Cx<S>) -> Vec<El> {
     let window = cx.layout_size(rune_kit::image_zoom::KEY).or_else(|| cx.layout_size("zoomed")).or_else(|| cx.layout_size("window")).unwrap_or([1280.0, 820.0]);
     let fade = SpringPair::new(Spring::new(0.15, 0.0), Spring::new(0.12, 0.0));
     let scrim = el().key("image-viewer-scrim").absolute(0.0, 0.0).w_full().h_full().fill(p.scrim).transition(Transition::opacity().springs(fade));
-    let natural = v.image.size().map_or([1.0, 1.0], |[w, h]| [w as f32, h as f32]);
+    let shown = v.resolution.shown();
+    let natural = match &v.resolution {
+        Resolution::Decoding { fallback, .. } => v.natural.or_else(|| fallback.size()),
+        Resolution::Ready(img) => img.size().or(v.natural),
+    }
+    .map_or([1.0, 1.0], |[w, h]| [w as f32, h as f32]);
     // With its place off screen there's nothing to fly from: it fades and grows in instead.
     let arrive = Transition::scale(0.96).springs(fade);
     let image = super::menu::on_image::<S>(el(), v.dragged.clone(), None)
@@ -175,7 +238,7 @@ pub fn viewer<S: TimelineHost>(s: &S, p: &Pal, cx: &Cx<S>) -> Vec<El> {
         .label(v.name.clone())
         .matched(v.id.clone())
         .token_motion(flight(s))
-        .pixels_fit(v.image.pixels(), SurfaceFit::Fill)
+        .pixels_fit(shown.pixels(), SurfaceFit::Fill)
         .transition(arrive);
     let store = s.media_store();
     let unclipped = home_in_view(s, cx);

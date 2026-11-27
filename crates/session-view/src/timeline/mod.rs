@@ -414,6 +414,11 @@ fn group_hash(messages: &[Message], detail: &crate::detail::Detail, script_diffs
                         if edits {
                             crate::activity::rules::script_changes(name, status, metadata).for_each(|(i, f)| (i, f["file"].as_str()).hash(&mut h));
                         }
+                        if script_diffs && name == "execute" {
+                            metadata["toolCalls"].as_array().into_iter().flatten().for_each(|c| {
+                                (c["tool"].as_str(), c["status"].as_str(), c["input"]["method"].as_str(), c["input"]["path"].as_str()).hash(&mut h);
+                            });
+                        }
                     }
                     Part::Reasoning { text, completed, .. } => (1u8, text.len(), completed).hash(&mut h),
                     Part::Text { text } => (2u8, text.len()).hash(&mut h),

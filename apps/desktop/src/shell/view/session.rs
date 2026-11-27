@@ -48,7 +48,8 @@ pub(super) fn session_body(s: &App, p: &Pal, id: &str, page: El, with_header: bo
             let child = s.session(id).is_some_and(|i| i.parent.is_some());
             // Pills sit outside `"timeline-area"` so job updates and activity ticks never dirty
             // the timeline region while `has_pills` stays the same (`ours.md` §3.2).
-            let pill_list = if child { Vec::new() } else { pills(s, p, id) };
+            // Nor does a session whose folder is gone (`region.tsx`: `above` hides while `missing()`).
+            let pill_list = if child || crate::location_missing::replaces_composer(s) { Vec::new() } else { pills(s, p, id) };
             let has_pills = !pill_list.is_empty();
             // A long transcript's projection fills in above its newest rows on the frame after its first.
             let inputs = (
@@ -68,6 +69,7 @@ pub(super) fn session_body(s: &App, p: &Pal, id: &str, page: El, with_header: bo
                     s.kernel.slots.untracked(&crate::files::FILES).reply_version(shown),
                     s.kernel.slots.untracked(&crate::subagents::SHELLS).follow.version(),
                     has_pills,
+                    session_view::TimelineHost::more_above(s, shown),
                     s.opening.as_ref().filter(|o| o.id == shown).and_then(|o| o.error()).map(str::to_owned),
                 ),
             );

@@ -41,10 +41,12 @@ fi
 found=$(cd "$app" && find . -type f -exec sh -c 'file -b "$1" | grep -q Mach-O && printf "%s\n" "${1#./}"' _ {} \; | LC_ALL=C sort)
 grep -Fxq Contents/MacOS/opencode-desktop <<< "$found" || die "$app_name.app has no Contents/MacOS/opencode-desktop."
 dylibs=()
+bundled_cli=""
 unexpected=""
 while IFS= read -r path; do
   case "$path" in
     Contents/MacOS/opencode-desktop) ;;
+    Contents/Resources/opencode-cli) bundled_cli="$path" ;;
     Contents/Frameworks/*.dylib)
       if [ "${path#Contents/Frameworks/}" = "${path##*/}" ]; then dylibs+=("$path"); else unexpected+=" $path"; fi
       ;;
@@ -60,10 +62,15 @@ notarize() {
   xcrun notarytool submit "$1" --key "$SEER_NOTARY_KEY" --key-id "$SEER_NOTARY_KEY_ID" --issuer "$SEER_NOTARY_ISSUER" --wait --timeout 45m
 }
 
-# Inside out: every dylib first (no entitlements: they belong to the app), then the app.
+# Inside out: every dylib first (no entitlements: they belong to the app), then the bundled Bun CLI
+# (matching official desktop-cli.plist: allow-jit + disable-library-validation for bun-pty), then
+# the app.
 for lib in ${dylibs[@]+"${dylibs[@]}"}; do
   sign "$app/$lib"
 done
+if [ -n "$bundled_cli" ]; then
+  sign --entitlements "$release/opencode-rune-cli.entitlements" "$app/$bundled_cli"
+fi
 sign --entitlements "$release/opencode-rune.entitlements" "$app"
 codesign --verify --deep --strict --verbose=2 "$app"
 

@@ -28,6 +28,22 @@ pub fn is_file_tool(c: &Call) -> bool {
     *c.status != opencode_kit::model::ToolStatus::Error && matches!(c.name, "edit" | "multiedit" | "write" | "patch" | "apply_patch")
 }
 
+/// Whether file tool `c` draws a bordered file card (0 pt vertical overhang) rather than its
+/// fallback 28 pt pending trigger (cheap check without computing a diff).
+pub fn draws_card(c: &Call) -> bool {
+    if let Some(files) = c.metadata["files"].as_array().filter(|f| !f.is_empty()) {
+        return files.iter().any(|f| changed(c, f).is_some());
+    }
+    if path(c.input).is_none() {
+        return false;
+    }
+    match c.name {
+        "edit" | "multiedit" => c.input["oldString"].as_str().zip(c.input["newString"].as_str()).is_some_and(|(o, n)| o != n),
+        "write" => field(c.input, "content").is_some(),
+        _ => false,
+    }
+}
+
 /// What a file's row says it did.
 #[derive(Clone, Copy, PartialEq)]
 enum Kind {
@@ -224,7 +240,10 @@ fn file_item<S: TimelineHost>(s: &S, p: &Pal, cx: Ctx, group: &str, item: &Item,
     }
     words = words.child(text(name.to_owned()).key("file").font(PATH).color(p.text).truncate_fade().shrink().min_w(0.0));
     let change = change(p, item);
-    let toggle = || crate::disclosure::set::<S>(k.clone(), open, row_key.clone());
+    // File diffs open and close without animating their parent group's fold glide
+    // (`packages/session-ui/src/timeline-next/tools/patch.tsx` `FileAccordionItem`,
+    // `packages/ui/src/data-display/accordion/accordion.css`).
+    let toggle = || crate::disclosure::set_instant::<S>(k.clone(), open, row_key.clone());
     // `apply-patch-file-info` (`patch.tsx:77-105`, `timeline-next.css:89-105`): the change counts
     // follow the file's name, and the grabber sits 4 pt closer to the right edge so its arrows
     // balance the file icon on the left.
@@ -281,9 +300,10 @@ fn file_item<S: TimelineHost>(s: &S, p: &Pal, cx: Ctx, group: &str, item: &Item,
         let diffs = item.diffs();
         let views = col().key("views").w_full().children(diffs.into_iter().map(|fd| super::diff::view::<S>(p, fd)));
         // Flush under the row, a hairline over the change (`edit-content`); the row's bottom
-        // border is the content's top, which has none of its own (`border-top: 0`).
-        out = out.child(crate::disclosure::reveal(
-            s.knobs(),
+        // border is the content's top, which has none of its own (`border-top: 0`). No reveal
+        // transition: official mounts the diff directly (`patch.tsx:157-167`, `accordion.css`)
+        // without re-animating sibling rows or the enclosing group.
+        out = out.child(
             col()
                 .key("content")
                 .w_full()
@@ -292,9 +312,10 @@ fn file_item<S: TimelineHost>(s: &S, p: &Pal, cx: Ctx, group: &str, item: &Item,
                 .fill(p.layer1)
                 .corners([0.0, 0.0, corner, corner])
                 .clip_corners([0.0, 0.0, corner, corner])
+                .transition(rune::Transition::none())
                 .child(rule(0.5, p.border_muted).key("hairline"))
                 .child(readable(p, views)),
-        ));
+        );
     }
     if let Some(errors) = errors {
         // An intentional Rune extra: Desktop lists a file's errors under a lone edit or write but

@@ -1085,7 +1085,7 @@
   "settings.about.otherContributor.other": "{{count}} digər",
   "settings.about.tagline": "Siz olmadan AI möhtəşəm proqram təminatı yarada bilməz",
   "settings.about.trademark": "OpenCode, Anomaly Innovations, Inc. şirkətinin qeydiyyatdan keçmiş ticarət nişanıdır.",
-  "settings.about.typeset": "Inter və IBM Plex Mono şriftləri ilə tərtib olunub",
+  "settings.about.typeset": "Inter və OpenMono şriftləri ilə tərtib olunub",
   "settings.about.version": "Versiya {{version}}",
   "settings.about.website": "www.opencode.ai",
   "settings.about.writtenByNames": "Müəllif: {{names}}",

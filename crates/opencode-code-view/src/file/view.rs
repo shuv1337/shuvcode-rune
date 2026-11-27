@@ -258,8 +258,11 @@ impl<S: 'static> Inner<S> {
         let get_mut = self.v.get_mut.clone();
         let notes = self.v.notes.clone();
         let path = st.path().to_owned();
+        // File viewer takes focus on click for keyboard scroll/commenting and draws no ring,
+        // without being a Tab stop (`packages/session-ui/src/components/file.tsx:904`, `opencode#65785`).
+        let _ = cursor;
         el.focusable(true)
-            .tab_index(if cursor { 0 } else { -1 })
+            .tab_index(-1)
             .focus_fill(self.look.hover)
             .no_focus_ring()
             .role("listitem")

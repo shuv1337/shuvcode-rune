@@ -109,6 +109,30 @@ pub trait ProjectSwitcherHost: opencode_kernel::AppEnv + opencode_kernel::AppOve
     fn handle_shortcut(&mut self, _ev: &KeyEvent, _tx: &mut Tx) -> bool {
         false
     }
+    /// The row picked in a dialog opened on one project's worktrees alone
+    /// ([`open_worktree_dialog`]'s `onSelect`).
+    fn worktree_picked(&mut self, _pick: WorktreePick, _tx: &mut Tx) {}
+}
+
+/// What the dialog is open for (`useNewSessionLocationDialog`, `useWorktreeDialog`).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum Purpose {
+    /// A new session's project and worktree.
+    #[default]
+    NewSession,
+    /// One project's worktree step on its own, with no way back to the projects; the pick goes
+    /// to the host. `omit` is a folder that can't be chosen, such as a session's missing one.
+    Worktree { omit: String },
+}
+
+/// A pick in a dialog opened on one project's worktrees alone (`useWorktreeDialog`'s `"create"`,
+/// or `"main"` and a worktree as their folders).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum WorktreePick {
+    /// New worktree.
+    Create,
+    /// The project's own checkout, or one of its worktrees.
+    Directory(String),
 }
 
 /// The dialog's step (`LocationDialogState.type`).
@@ -140,6 +164,7 @@ pub struct OpenState {
     pub(crate) restore_composer: bool,
     /// Every ready server's projects, when more than one is listed (`servers.rs`).
     pub(crate) servers: Vec<servers::Listed>,
+    pub(crate) purpose: Purpose,
 }
 
 /// Modal lifecycle of [`ProjectSwitcher`]: step, history, highlight, pointer, focus-return origin,
@@ -197,6 +222,7 @@ impl ProjectSwitcherState {
                     pointer: None,
                     restore_composer,
                     servers,
+                    purpose: Purpose::NewSession,
                 }));
                 None
             }
@@ -292,6 +318,22 @@ pub fn rows(host: &dyn ProjectSwitcherHost) -> Vec<SwitcherRow> {
     if let StepMode::Branches { list, .. } = &open.mode {
         return branches::rows(list, q);
     }
+    // A folder that can't be chosen is left out; New worktree stays (`dialog.tsx`'s `omit`).
+    if let Purpose::Worktree { omit } = &open.purpose {
+        let mut rows = step_rows(host, open, q);
+        rows.retain(|r| !matches!(&r.kind, RowKind::Worktree { directory, .. } if same_directory(directory, omit)));
+        return rows;
+    }
+    step_rows(host, open, q)
+}
+
+/// `sameDirectory`: one folder however its separators and trailing slash are written.
+fn same_directory(a: &str, b: &str) -> bool {
+    let norm = |s: &str| s.trim_end_matches(['/', '\\']).replace('\\', "/");
+    norm(a) == norm(b)
+}
+
+fn step_rows(host: &dyn ProjectSwitcherHost, open: &OpenState, q: &str) -> Vec<SwitcherRow> {
     if !open.servers.is_empty() {
         return match &open.mode {
             StepMode::Worktrees { project, server, .. } => {
@@ -429,6 +471,20 @@ pub fn open_worktrees(host: &mut dyn ProjectSwitcherHost, project: &str, tx: &mu
     }
 }
 
+/// Opens `project`'s worktree step on its own, with no way back to the projects
+/// (`useWorktreeDialog`, `createLocationDialogState(drilled, only)`): the row picked goes to
+/// [`ProjectSwitcherHost::worktree_picked`], and `omit` is left out of the rows.
+pub fn open_worktree_dialog(host: &mut dyn ProjectSwitcherHost, project: &str, omit: String, tx: &mut Tx) {
+    open_with_focus(host, tx.focused().map(str::to_owned));
+    host.list_worktrees_on(None, project);
+    tx.instant();
+    if let Some(open) = host.project_switcher_mut().state.open_state_mut() {
+        open.history = Vec::new();
+        open.purpose = Purpose::Worktree { omit };
+        open.mode = StepMode::Worktrees { project: project.to_owned(), server: None, direct: true, base: None };
+    }
+}
+
 pub fn close(host: &mut dyn ProjectSwitcherHost, restore: bool) {
     if !host.project_switcher().is_open() {
         return;
@@ -518,6 +574,17 @@ pub(super) fn location_event(host: &mut dyn ProjectSwitcherHost, event: location
 
 pub fn choose(host: &mut dyn ProjectSwitcherHost, key: &str, tx: &mut Tx) {
     let Some(row) = rows(host).into_iter().find(|r| r.key == key) else { return };
+    // One project's worktrees alone: the pick is the host's, whatever page is open.
+    if matches!(host.project_switcher().state.open_state().map(|open| &open.purpose), Some(Purpose::Worktree { .. })) {
+        let pick = match row.kind {
+            RowKind::Create { .. } => WorktreePick::Create,
+            RowKind::Worktree { directory, .. } => WorktreePick::Directory(directory),
+            _ => return,
+        };
+        tx.instant();
+        close(host, false);
+        return host.worktree_picked(pick, tx);
+    }
     let worktree = matches!(row.kind, RowKind::Worktree { main: false, .. });
     let base = match host.project_switcher().mode() {
         Some(StepMode::Worktrees { base, .. }) => base.clone(),
@@ -608,8 +675,10 @@ pub fn key(host: &mut dyn ProjectSwitcherHost, ev: &KeyEvent, tx: &mut Tx) -> bo
     if host.project_switcher().search.is_composing() {
         return false;
     }
-    // ⌘O is Add project here, as Desktop binds `project.open` while this dialog shows.
-    if Bind::OpenProject.matches_tx(ev, tx) {
+    // ⌘O is Add project here, as Desktop binds `project.open` while this dialog shows. One that
+    // lists a single project's worktrees has no projects to open one from, and leaves it to the app.
+    let only = matches!(host.project_switcher().state.open_state().map(|open| &open.purpose), Some(Purpose::Worktree { .. }));
+    if !only && Bind::OpenProject.matches_tx(ev, tx) {
         add_project(host, tx);
         return true;
     }

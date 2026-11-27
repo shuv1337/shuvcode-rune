@@ -1105,7 +1105,7 @@
   "settings.about.otherContributor.zero": "{{count}} citu",
   "settings.about.tagline": "AI nevar izveidot lielisku programmatūru bez jums",
   "settings.about.trademark": "OpenCode ir Anomaly Innovations, Inc. reģistrēta preču zīme.",
-  "settings.about.typeset": "Salikums Inter un IBM Plex Mono",
+  "settings.about.typeset": "Salikums Inter un OpenMono",
   "settings.about.version": "Versija {{version}}",
   "settings.about.website": "www.opencode.ai",
   "settings.about.writtenByNames": "Autors: {{names}}",

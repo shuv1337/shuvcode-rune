@@ -111,8 +111,11 @@ fn user_file_store() -> &'static Mutex<HashMap<String, Arc<[Attachment]>>> {
 }
 
 /// Keeps only the user messages `keep` says are still held (`model::retain_user_messages`).
-pub(crate) fn retain_user_files(keep: &dyn Fn(&str) -> bool) {
-    user_file_store().lock().unwrap_or_else(std::sync::PoisonError::into_inner).retain(|id, _| keep(id));
+pub(crate) fn retain_user_files(keep: &dyn Fn(&str) -> bool) -> bool {
+    let mut store = user_file_store().lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let before = store.len();
+    store.retain(|id, _| keep(id));
+    store.len() != before
 }
 
 /// Moves whenever a prompt's files, comments or path attachments change: what a prompt's row

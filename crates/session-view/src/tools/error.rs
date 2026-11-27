@@ -98,7 +98,9 @@ pub fn card_with<S: TimelineHost>(s: &S, p: &Pal, session: &str, c: &Call, defau
     // `tool-error-card.css:151-172`: a selection in the content is state-bg-danger under text-base,
     // the window active or not.
     let picked = rune::SelectionStyle::new(p.danger_bg).ink(p.text).inactive(p.danger_bg, Some(p.text));
-    let mut content = col().key("error").w_full().pr(40.0);
+    // `error-details-text` (`packages/ui/src/components/error-details.tsx:7`, `error-details.css:26`,
+    // `opencode#65785`): click-focusable for keyboard scrolling (`tab_index(-1)`), no focus ring.
+    let mut content = col().key("error").w_full().pr(40.0).focusable(true).tab_index(-1).no_focus_ring();
     if let Some(t) = sub.filter(|_| clipped) {
         // `tool-error-card-subtitle`: a plain `overflow-y: auto` box's bar (`tool-error-card.css:117-122`).
         let full = col().w_full().max_h(super::console::MAX_H).mb(4.0);

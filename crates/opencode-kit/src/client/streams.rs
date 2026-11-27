@@ -139,7 +139,7 @@ fn check(s: &Arc<Stream>, at: Instant) {
 /// Whether `server` answers at all, on a connection of its own (a pooled one may be the dead
 /// one): any HTTP answer counts, a refusal or silence past [`CHECK`] doesn't.
 fn answers(server: &Server) -> Result<(), WireError> {
-    let config = ureq::Agent::config_builder().timeout_global(Some(CHECK)).http_status_as_error(false).max_redirects(0).max_idle_connections(0);
+    let config = net_trust::agent_config_for(&server.base).timeout_global(Some(CHECK)).http_status_as_error(false).max_redirects(0).max_idle_connections(0);
     let agent: ureq::Agent = if http::loopback(&server.base) { config.proxy(None) } else { config }.build().into();
     let mut req = agent.get(format!("{}/api/info", server.base));
     if let Some(a) = &server.auth {

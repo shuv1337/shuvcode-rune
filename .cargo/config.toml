@@ -14,10 +14,9 @@ rustflags = ["-C", "target-feature=+crt-static", "-C", "link-arg=/NODEFAULTLIB:l
 # macOS link uses), so a launch whose exe is not in memory reads few pages of it. Every other link
 # passes through to cc untouched, and so does the exe's own when the order cannot be made (the
 # script never fails a build). A path with a slash is taken from the folder that holds `.cargo`.
+# x86_64 only: its link goes through lld, which alone takes an order. The aarch64 link goes through
+# the system linker, so the script could only pass it on and warn: that target keeps cargo's default.
 [target.x86_64-unknown-linux-gnu]
-linker = "apps/desktop/scripts/link-order-linux.sh"
-
-[target.aarch64-unknown-linux-gnu]
 linker = "apps/desktop/scripts/link-order-linux.sh"
 
 # getrandom's browser backend (crypto.getRandomValues), which it takes only through this cfg; and

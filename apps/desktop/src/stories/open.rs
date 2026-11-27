@@ -3,7 +3,7 @@ use std::sync::{Arc, mpsc::Sender};
 use opencode_kit::model::{self, Message, Transcript};
 use rune::{El, Play, col, text};
 use serde_json::json;
-use crate::{App, Route, palette::Pal, session_pages::{Key, Page, Pages}};
+use crate::{App, Route, palette::Pal, session_pages::{Key, Page, PageResult, Pages}};
 use crate::stories::{Trigger, replay};
 
 const TARGET: &str = "ses_open_story";
@@ -11,7 +11,7 @@ const MEDIA: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 pub struct Demo {
     page: Arc<Page>,
-    send: Sender<Result<Arc<Page>, (Key, opencode_kit::wire_error::WireError)>>,
+    send: Sender<PageResult>,
     png: Vec<u8>,
     at: usize,
     // The "Switch at once" variant: a faithful replay of the old route switch.

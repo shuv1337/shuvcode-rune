@@ -103,9 +103,9 @@ struct Open {
     /// Every `(server, session_id)` this window holds in its tabs or active route, so another
     /// window resting (`App::rest`) never evicts a session still open here.
     shown: Vec<(opencode_kit::servers::ServerKey, String)>,
-    /// Weak handle to this window's per-window `Pages` prefetch cache so another window's
-    /// `App::rest` never prunes process-global user-message metadata for pages cached here.
-    pages: Option<crate::session_pages::CacheRef>,
+    /// Weak handles to every `Pages` prefetch cache in this window (active and parked servers)
+    /// so another window's `App::rest` never prunes user-message metadata for pages cached here.
+    pages: Vec<crate::session_pages::CacheRef>,
 }
 
 thread_local! {
@@ -174,7 +174,7 @@ pub fn register(id: &str, handle: WindowHandle, app: AppHandle<App>, life: life:
     OPEN.with(|o| {
         let mut o = o.borrow_mut();
         o.retain(|w| w.id != id);
-        o.push(Open { id: id.to_owned(), handle, app, strip: None, life, focused: 0, reported: false, shown_stamp: 0, shown: Vec::new(), pages: None });
+        o.push(Open { id: id.to_owned(), handle, app, strip: None, life, focused: 0, reported: false, shown_stamp: 0, shown: Vec::new(), pages: Vec::new() });
     });
     focused(id);
 }
@@ -195,8 +195,8 @@ pub fn sync_shown(s: &App) {
         let mut o = o.borrow_mut();
         let Some(w) = o.iter_mut().find(|w| w.id == s.window.id) else { return };
         w.reported = true;
-        if !w.pages.as_ref().is_some_and(|c| s.pages.same_pool(c)) {
-            w.pages = s.pages.cache_ref();
+        if !crate::servers::runtime::same_cache_refs(s, &w.pages) {
+            w.pages = crate::servers::runtime::all_cache_refs(s);
         }
         if w.shown_stamp == stamp {
             return;
@@ -237,7 +237,7 @@ pub fn other_windows_cached_user_messages(exclude_id: &str) -> Vec<String> {
         o.borrow()
             .iter()
             .filter(|w| w.id != exclude_id)
-            .filter_map(|w| w.pages.as_ref())
+            .flat_map(|w| w.pages.iter())
             .flat_map(crate::session_pages::CacheRef::user_message_ids)
             .collect()
     })
@@ -343,6 +343,7 @@ impl App {
     /// Reads where the window is (`placement`); the frame to save, unless it's minimized.
     fn window_frame(&mut self) -> Option<store::Frame> {
         let p = handle(&self.window.id)?.placement()?;
+        self.set_browser_window_minimized(p.minimized);
         let (next, frame) = self.window.placement.step(p);
         if self.window.placement != next {
             self.window.placement = next;

@@ -50,7 +50,10 @@ fn dial(server: &Server, url: &str) -> ConnectOutcome {
     tcp.set_nodelay(true).ok();
     tcp.set_read_timeout(Some(CONNECT_TIMEOUT)).ok();
     tcp.set_write_timeout(Some(CONNECT_TIMEOUT)).ok();
-    match tungstenite::client_tls(req, tcp) {
+    // A `wss://` server's certificate is checked as the operating system checks it (`net_trust`);
+    // a `ws://` one (the local server) builds no TLS configuration.
+    let tls = url.starts_with("wss:");
+    match tungstenite::client_tls_with_config(req, tcp, None, tls.then(net_trust::rustls_client_config).flatten().map(tungstenite::Connector::Rustls)) {
         Ok((ws, _)) => ConnectOutcome::Connected(Box::new(ws)),
         Err(tungstenite::HandshakeError::Failure(tungstenite::Error::Http(resp)))
             if matches!(resp.status().as_u16(), 404 | 405 | 501) =>

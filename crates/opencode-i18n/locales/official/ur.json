@@ -1085,7 +1085,7 @@
   "settings.about.otherContributor.other": "⁨{{count}}⁩ دیگر",
   "settings.about.tagline": "آپ کے بغیر AI بہترین سافٹ ویئر نہیں بنا سکتا",
   "settings.about.trademark": "OpenCode، Anomaly Innovations, Inc. کا رجسٹرڈ ٹریڈ مارک ہے۔",
-  "settings.about.typeset": "Inter اور IBM Plex Mono میں ٹائپ سیٹ",
+  "settings.about.typeset": "Inter اور OpenMono میں ٹائپ سیٹ",
   "settings.about.version": "ورژن ⁨{{version}}⁩",
   "settings.about.website": "www.opencode.ai",
   "settings.about.writtenByNames": "⁨{{names}}⁩ کی تحریر",

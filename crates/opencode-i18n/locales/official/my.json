@@ -1085,7 +1085,7 @@
   "settings.about.otherContributor.other": "အခြား {{count}} ခု",
   "settings.about.tagline": "AI သည် သင်မပါဘဲ ကောင်းမွန်သော ဆော့ဖ်ဝဲလ်ကို မတည်ဆောက်နိုင်ပါ။",
   "settings.about.trademark": "OpenCode သည် Anomaly Innovations, Inc ၏ မှတ်ပုံတင်ထားသော ကုန်အမှတ်တံဆိပ်တစ်ခုဖြစ်သည်။",
-  "settings.about.typeset": "Inter နှင့် IBM Plex Mono တွင် အမျိုးအစားအစုံ",
+  "settings.about.typeset": "Inter နှင့် OpenMono တွင် အမျိုးအစားအစုံ",
   "settings.about.version": "ဗားရှင်း {{version}}",
   "settings.about.website": "www.opencode.ai",
   "settings.about.writtenByNames": "{{names}} မှ ရေးသည်",

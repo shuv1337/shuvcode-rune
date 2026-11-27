@@ -74,7 +74,7 @@ pub fn set_custom_font(name: &str) {
     let list = (!name.is_empty()).then(|| {
         KEPT.with_borrow_mut(|kept| {
             *kept.entry(name.to_owned()).or_insert_with(|| {
-                Box::leak(format!("{}, JetBrainsMono Nerd Font Mono", css_family(name)).into_boxed_str())
+                Box::leak(format!("{}, OpenMono, OpenMono Icons", css_family(name)).into_boxed_str())
             })
         })
     });
@@ -91,10 +91,10 @@ pub fn terminal_font_style(knobs: &Knobs) -> (u8, TextStyle) {
     let family = match choice {
         _ if custom.is_some() => Family::Named(custom.unwrap_or_default()),
         // By name, so the code font (the mono slot) doesn't change the terminal's.
-        1 => Family::Named("IBM Plex Mono"),
+        1 => Family::Named("IBM Plex Mono, OpenMono, OpenMono Icons"),
         2 => Family::SystemMono,
-        3 => Family::Named("JetBrainsMono Nerd Font Mono"),
-        _ => Family::Named("CommitMono"),
+        3 => Family::Named("OpenMono, OpenMono Icons"),
+        _ => Family::Named("CommitMono, OpenMono, OpenMono Icons"),
     };
     let mut st = TextStyle::new(size, 400.0).lh(lh);
     st.family = family;
@@ -139,11 +139,11 @@ fn measure(choice: u8, style: TextStyle, scale: f32) -> (f32, f32, f32) {
         let advance = rune::text::advance("MMMMMMMMMM", style) / 10.0;
         let advance = if advance > 1.0 { advance } else { (style.size * 0.6).max(6.0) };
         let cw = (advance * scale).round().max(1.0) / scale;
-        // JetBrains Mono's font box (hhea 1020 up, 300 down), each side rounded as the canvas
-        // reports it; another face keeps its line height.
+        // OpenMono's font box (hhea 965 up, 220 down at 1000 UPM, `opencode#64797`), each side
+        // rounded as the canvas reports it; another face keeps its line height.
         let ch = if choice == 3 {
             let px = style.size * scale;
-            ((px * 1.02).round() + (px * 0.3).round()).max(1.0) / scale
+            ((px * 0.965).round() + (px * 0.22).round()).max(1.0) / scale
         } else {
             style.line_px().max(style.size.ceil() + 2.0)
         };

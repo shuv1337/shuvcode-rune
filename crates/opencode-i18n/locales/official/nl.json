@@ -1085,7 +1085,7 @@
   "settings.about.otherContributor.other": "{{count}} andere",
   "settings.about.tagline": "AI kan geen geweldige software bouwen zonder jou",
   "settings.about.trademark": "OpenCode is een geregistreerd handelsmerk van Anomaly Innovations, Inc.",
-  "settings.about.typeset": "Opgemaakt in Inter en IBM Plex Mono",
+  "settings.about.typeset": "Opgemaakt in Inter en OpenMono",
   "settings.about.version": "Versie {{version}}",
   "settings.about.website": "www.opencode.ai",
   "settings.about.writtenByNames": "Geschreven door {{names}}",

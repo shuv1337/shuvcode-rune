@@ -1105,7 +1105,7 @@
   "settings.about.otherContributor.other": "{{count}} drugih",
   "settings.about.tagline": "AI ne može izgraditi odličan softver, bez vas",
   "settings.about.trademark": "OpenCode je registrirani zaštitni znak Anomaly Innovations, Inc.",
-  "settings.about.typeset": "Označeno u Inter i IBM Plex Mono",
+  "settings.about.typeset": "Označeno u Inter i OpenMono",
   "settings.about.version": "Verzija {{version}}",
   "settings.about.website": "www.opencode.ai",
   "settings.about.writtenByNames": "Napisao {{names}}",

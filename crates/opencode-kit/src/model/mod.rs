@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 use serde_json::Value;
 
 mod attachment;
+mod automation;
 mod background_result;
 mod catalog;
 mod compaction;
@@ -24,6 +25,7 @@ mod transcript;
 pub mod turn;
 
 pub use attachment::{Attachment, base64_decode, media_hash, parse_attachment, prompt_extras_generation, set_user_files, user_files};
+pub use automation::{AutomationAction, AutomationInfo, AutomationOutcome, AutomationStatus, AutomationTarget, AutomationTime, AutomationTrigger, parse_automation, parse_automations};
 pub use background_result::{BackgroundResult, BackgroundResultKind, parse_background_result};
 pub use catalog::{AttachmentInput, Model, Speed};
 pub(crate) use attachment::extras_changed;
@@ -284,12 +286,20 @@ fn user_created_store() -> &'static Mutex<HashMap<String, i64>> {
 /// path attachments, comments), kept only for the messages `keep` names: an app that lets go of a
 /// transcript calls it, so those go too. A message parsed again fills them again.
 pub fn retain_user_messages(keep: &dyn Fn(&str) -> bool) {
-    attachment::retain_user_files(keep);
-    user_created_store().lock().unwrap_or_else(PoisonError::into_inner).retain(|id, _| keep(id));
+    let mut dropped = attachment::retain_user_files(keep);
+    {
+        let mut created = user_created_store().lock().unwrap_or_else(PoisonError::into_inner);
+        let before = created.len();
+        created.retain(|id, _| keep(id));
+        dropped |= created.len() != before;
+    }
     crate::mention::retain_user_messages(keep);
     crate::quote::retain_user_comments(keep);
-    // What was let go of a projection may have read: it projects again.
-    extras_changed();
+    dropped |= inbox::retain_inbox_payloads(keep);
+    if dropped {
+        // What was let go of a projection may have read: it projects again.
+        extras_changed();
+    }
 }
 
 /// When user message `id` was sent (ms), once known: a reply's duration runs from it.

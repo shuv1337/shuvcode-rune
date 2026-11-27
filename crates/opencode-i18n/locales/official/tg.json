@@ -1085,7 +1085,7 @@
   "settings.about.otherContributor.other": "{{count}} нафари дигар",
   "settings.about.tagline": "AI бе шумо нармафзори олӣ сохта наметавонад",
   "settings.about.trademark": "OpenCode тамғаи тиҷории бақайдгирифтаи Anomaly Innovations, Inc. мебошад.",
-  "settings.about.typeset": "Бо Inter ва IBM Plex Mono ҳуруфчинӣ шудааст",
+  "settings.about.typeset": "Бо Inter ва OpenMono ҳуруфчинӣ шудааст",
   "settings.about.version": "Версияи {{version}}",
   "settings.about.website": "www.opencode.ai",
   "settings.about.writtenByNames": "Муаллиф: {{names}}",

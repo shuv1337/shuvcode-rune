@@ -46,7 +46,7 @@ pub fn browser_settings(background_color: u32, disable_js_clipboard: bool) -> ce
         cef::sys::cef_state_t::STATE_DEFAULT
     };
     cef::BrowserSettings {
-        windowless_frame_rate: crate::input_fps::PANE_FPS,
+        windowless_frame_rate: crate::input_fps::pane_fps(),
         background_color,
         javascript_access_clipboard: clip.into(),
         javascript_dom_paste: clip.into(),

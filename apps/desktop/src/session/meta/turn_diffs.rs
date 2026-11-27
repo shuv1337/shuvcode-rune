@@ -48,6 +48,14 @@ impl TurnDiffs {
     pub fn retry(&mut self, session: &str, from: &str) {
         self.states.remove(&(session.to_owned(), from.to_owned()));
     }
+
+    pub fn retain(&mut self, keep: &dyn Fn(&str) -> bool) {
+        self.states.retain(|(session, _), _| keep(session));
+    }
+
+    pub fn forget(&mut self, session: &str) {
+        self.states.retain(|(s, _), _| s != session);
+    }
 }
 
 impl App {

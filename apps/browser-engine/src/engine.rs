@@ -1,6 +1,6 @@
 //! Multi-tab CEF OSR manager inside the sidecar process.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -60,7 +60,9 @@ pub(crate) struct ManagedTab {
     deferred_initial: Arc<AtomicBool>,
     _cdp_reg: Option<Registration>,
     held_buttons: u32,
-    /// Linux: whether it's the tab the app shows (`HostMsg::FocusTab`), to open it again so.
+    pub(crate) render_mode: lifecycle::TabRenderMode,
+    pub(crate) awake: Arc<AtomicBool>,
+    /// Linux: whether it's currently visible in a desktop pane, to reopen it so on transport reset.
     #[cfg(target_os = "linux")]
     shown: bool,
     #[cfg(any(windows, target_os = "linux"))]
@@ -69,6 +71,10 @@ pub(crate) struct ManagedTab {
 
 pub struct EngineManager {
     tabs: HashMap<u64, ManagedTab>,
+    visible_tabs: HashSet<u64>,
+    unthrottled_tabs: HashSet<u64>,
+    focused_tab: Option<u64>,
+    lifecycle_mode: lifecycle::LifecycleMode,
     mach_port: Arc<AtomicU32>,
     out_tx: crate::output::Output,
     events: std::sync::mpsc::Sender<crate::Event>,
@@ -139,6 +145,10 @@ impl EngineManager {
         let registered_ext_ids = Arc::new(Mutex::new(extensions.as_ref().map(|e| e.registered_ext_ids()).unwrap_or_default()));
         Self {
             tabs: HashMap::new(),
+            visible_tabs: HashSet::new(),
+            unthrottled_tabs: HashSet::new(),
+            focused_tab: None,
+            lifecycle_mode: lifecycle::LifecycleMode::Legacy,
             mach_port: Arc::new(AtomicU32::new(0)),
             out_tx,
             events: events.clone(),
@@ -180,6 +190,7 @@ impl EngineManager {
     pub fn on_host_disconnected(&mut self) {
         self.previews.cancel_all_proxies();
         self.downloads.cancel_all_pending_saves();
+        self.on_disconnect_lifecycle();
     }
 
     pub fn handle(&mut self, msg: HostMsg) -> bool {
@@ -194,10 +205,11 @@ impl EngineManager {
 
     fn handle_msg(&mut self, msg: HostMsg) -> bool {
         match msg {
-            HostMsg::Hello { mach_service, prompts, extensions, download_save, .. } => {
+            HostMsg::Hello { mach_service, prompts, extensions, download_save, tab_lifecycle, .. } => {
                 self.prompt_shared.enabled.store(prompts, Ordering::Relaxed);
                 self.app_handles_ext_tabs = extensions;
                 self.downloads.set_download_save_enabled(download_save);
+                self.on_hello_lifecycle(tab_lifecycle);
                 #[cfg(not(target_os = "macos"))]
                 let _ = mach_service;
                 #[cfg(target_os = "macos")]
@@ -227,6 +239,7 @@ impl EngineManager {
                     passkeys: true,
                     trace_isolation: true,
                     menu_extras: true,
+                    tab_lifecycle: true,
                 });
                 for (&tab_id, t) in &self.tabs {
                     t.menu.cancel_all();
@@ -260,7 +273,9 @@ impl EngineManager {
                         if let Some(ring) = &t.frames {
                             let _ = ring.lock().unwrap().step(crate::dmabuf_frames::Event::Released);
                         }
-                        t.host.invalidate(PaintElementType::default());
+                        if !tab_lifecycle && t.render_mode.is_awake() {
+                            t.host.invalidate(PaintElementType::default());
+                        }
                     }
                 }
             }
@@ -311,29 +326,9 @@ impl EngineManager {
                 }
             }
             HostMsg::CloseTab { tab_id } => self.close_managed_tab(tab_id),
-            HostMsg::FocusTab { tab_id } => {
-                for (&id, t) in &mut self.tabs {
-                    let active = id == tab_id;
-                    let agent = t.prompts.agent_driven.load(Ordering::Relaxed);
-                    #[cfg(target_os = "linux")]
-                    {
-                        t.shown = active;
-                        // A hidden tab paints nothing: its buffers go until it's shown again.
-                        if let Some(ring) = t.frames.as_ref().filter(|_| !active) {
-                            let _ = ring.lock().unwrap().step(crate::dmabuf_frames::Event::Released);
-                        }
-                    }
-                    if !t.is_popup {
-                        // Agent-driven background tabs stay unthrottled so waits, screenshots and traces never stall.
-                        t.host.was_hidden(i32::from(!active && !agent));
-                    }
-                    t.host.set_focus(i32::from(active));
-                    if active {
-                        t.host.invalidate(PaintElementType::default());
-                    }
-                }
-                self.on_tab_focus_extensions(tab_id);
-            }
+            HostMsg::FocusTab { tab_id } => self.handle_focus_tab(tab_id),
+            HostMsg::SetVisibleTabs { tab_ids } => self.handle_set_visible_tabs(tab_ids),
+            HostMsg::SetTabUnthrottled { tab_id, active } => self.handle_set_tab_unthrottled(tab_id, active),
             HostMsg::Navigate { tab_id, url } => {
                 if let Some((is_preview, is_popup, snap_url, is_agent, isolated, ext_allowed, roots)) =
                     self.tabs.get(&tab_id).map(|t| {
@@ -482,10 +477,9 @@ impl EngineManager {
             // context's Chrome colour scheme doesn't reach windowless pages, DevTools emulation does.
             HostMsg::SetColorScheme { dark } => {
                 self.dark = Some(dark);
-                for t in self.tabs.values() {
-                    self.send_color_scheme(&t.host, dark);
-                }
+                for t in self.tabs.values() { self.send_color_scheme(&t.host, dark); }
             }
+            HostMsg::SetFrameRate { fps } => self.set_frame_rate(fps),
             HostMsg::Emulate { tab_id, device, scale } => {
                 if let Some(t) = self.tabs.get(&tab_id)
                     && self.contexts.is_tab_ready(tab_id)
@@ -531,6 +525,7 @@ impl EngineManager {
                 // The person's press takes the tab back before the click reaches the page, so a
                 // file picker this click opens is theirs (official `policy.ts:121-125`).
                 if !up {
+                    self.focused_tab = Some(tab_id);
                     self.set_user_reclaimed(tab_id, true);
                 }
                 if let Some(t) = self.tabs.get_mut(&tab_id) {
@@ -1118,6 +1113,7 @@ impl EngineManager {
             preview: preview_grant.as_ref().map(|g| g.kind.tag()),
             agent_driven,
             document: 0,
+            audible: false,
         }));
         #[cfg(windows)]
         let frames: FrameRing = self
@@ -1132,12 +1128,14 @@ impl EngineManager {
         let shared_texture = frames.is_some();
         #[cfg(target_os = "macos")]
         let shared_texture = true;
+        let awake = Arc::new(AtomicBool::new(true));
         let render = TabRenderHandler::new(
             tab_id,
             view_state.clone(),
             self.mach_port.clone(),
             self.out_tx.clone(),
             Arc::new(AtomicU64::new(0)),
+            awake.clone(),
             frames.clone(),
             #[cfg(target_os = "linux")]
             self.events.clone(),
@@ -1330,22 +1328,8 @@ impl EngineManager {
             });
             return;
         };
-        if is_popup {
-            host.was_hidden(0);
-            host.set_focus(1);
-        } else if focused {
-            for existing in self.tabs.values() {
-                if !existing.is_popup {
-                    if !existing.prompts.agent_driven.load(Ordering::Relaxed) {
-                        existing.host.was_hidden(1);
-                    }
-                    existing.host.set_focus(0);
-                }
-            }
-            host.set_focus(1);
-        } else {
-            host.was_hidden(1);
-        }
+        // Initial visibility, FPS throttling, and GPU frame ring release are applied
+        // uniformly via `self.on_tab_opened` right after insertion into `self.tabs`.
 
         let cdp_id_map = Arc::new(Mutex::new(HashMap::new()));
         let cdp_ledger = Arc::new(Mutex::new(crate::cdp_ledger::EngineCdpLedger::with_registered_exts(self.registered_ext_ids.clone())));
@@ -1419,12 +1403,15 @@ impl EngineManager {
                 deferred_initial,
                 _cdp_reg: cdp_reg,
                 held_buttons: 0,
+                render_mode: lifecycle::TabRenderMode::AwakeBackground,
+                awake,
                 #[cfg(target_os = "linux")]
                 shown: focused,
                 #[cfg(any(windows, target_os = "linux"))]
                 frames,
             },
         );
+        self.on_tab_opened(tab_id, focused, is_popup);
         if !isolated && !is_preview && !is_popup {
             self.notify_ext_tab_opened(tab_id, &initial_url, width_pt, height_pt, focused, ext_open_request_id, agent_driven);
         }
@@ -1440,6 +1427,7 @@ impl EngineManager {
     }
 
     fn close_managed_tab(&mut self, tab_id: u64) {
+        self.on_tab_closed_lifecycle(tab_id);
         self.permissions.on_tab_closed(tab_id);
         if let Some(tab) = self.tabs.remove(&tab_id) {
             if self.prompt_shared.release_trace(tab_id) {
@@ -1495,5 +1483,6 @@ pub(crate) use extensions::{Surface, classify_surface};
 mod emulation;
 mod extensions;
 mod frames;
+mod lifecycle;
 mod picks;
 mod profile_cookies;

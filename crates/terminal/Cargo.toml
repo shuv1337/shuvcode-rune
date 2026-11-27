@@ -16,6 +16,7 @@ tungstenite = { version = "0.28", default-features = false, features = ["handsha
 
 # wss:// natively; a browser build has no TLS of its own here.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+net-trust = { path = "../net-trust" }
 tungstenite = { version = "0.28", default-features = false, features = ["handshake", "rustls-tls-webpki-roots"] }
 # A persistent PTY's worker sleeps on its socket and its commands together (IOCP on Windows).
 polling.workspace = true

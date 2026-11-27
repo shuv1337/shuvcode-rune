@@ -47,7 +47,7 @@ fn thumb<S: TimelineHost>(s: &S, p: &Pal, message: &str, files: &std::sync::Arc<
     let f = &files[i];
     let store = s.media_store();
     let key = format!("file-{i}");
-    let image = store.image(f).filter(|img| img.error().is_none());
+    let image = store.image_sized(f, 264.0).filter(|img| img.error().is_none());
     let (w, h) = THUMB;
     let ring = el().key("ring").absolute(0.0, 0.0).size(w, h).radius(6.0).box_shadow(Pal::ring_in(p.border)).inert();
     let tile = el().key(key.clone()).label(f.name.clone()).size(w, h).radius(6.0).fill(p.layer2);

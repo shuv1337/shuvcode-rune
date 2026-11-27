@@ -53,13 +53,18 @@ pub(super) fn composer_dock(s: &App, p: &Pal) -> El {
                 .children(dock)
                 .children(status);
         }
+        // A session whose folder is gone shows its card in the composer's place, and nothing
+        // over it (`region.tsx`: `above` hides while `missing()`).
+        let missing = crate::location_missing::replaces_composer(s);
         let queue = match &*s.route {
             Route::Session { id, .. } => {
-                Some(col().key("queue-room").w_full().items_center().child(crate::queue::panel(s, p, id, s.busy(id))))
+                (!missing).then(|| col().key("queue-room").w_full().items_center().child(crate::queue::panel(s, p, id, s.busy(id))))
             }
             _ => None,
         };
-        let body = if crate::free_limit::replaces_composer(s) {
+        let body = if missing {
+            crate::location_missing::panel(s, p)
+        } else if crate::free_limit::replaces_composer(s) {
             crate::free_limit::panel(s, p)
         } else {
             composer(s, p)

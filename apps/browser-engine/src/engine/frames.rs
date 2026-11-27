@@ -4,7 +4,6 @@
 #[cfg(target_os = "linux")]
 use std::sync::atomic::Ordering;
 
-#[cfg(any(windows, target_os = "linux"))]
 use cef::ImplBrowserHost;
 #[cfg(windows)]
 use cef::PaintElementType;
@@ -12,6 +11,16 @@ use cef::PaintElementType;
 use super::EngineManager;
 
 impl EngineManager {
+    /// Updates the display-matched off-screen frame rate on all live non-boosted tabs.
+    pub(super) fn set_frame_rate(&self, fps: u32) {
+        let Some(clamped) = crate::input_fps::set_pane_fps(fps) else { return };
+        for (&tab_id, t) in &self.tabs {
+            if t.render_mode.is_awake() && !crate::input_fps::is_boosted(tab_id) {
+                t.host.set_windowless_frame_rate(clamped);
+            }
+        }
+    }
+
     /// Whether a tab dropped a frame and waits for the app to free a texture (`poll_frames`).
     pub fn waits_for_texture(&self) -> bool {
         #[cfg(windows)]

@@ -265,6 +265,8 @@ pub fn rendered<H: FilesHost + 'static>(
                 .highlights(marks)
                 .block_keys(headings(src).into_iter().map(|(at, s)| (at, heading_key(&s))))
                 .selectable(true)
+                // Official Markdown sets `overflow-wrap: break-word` (`packages/session-ui/src/components/markdown.css:54`).
+                .wrap_anywhere(true)
                 .on_link_tx(move |s: &mut H, url: &str, tx: &mut Tx| {
                     crate::links::open_link(s, &sid_link, Some(&path_link), url, tx);
                 })

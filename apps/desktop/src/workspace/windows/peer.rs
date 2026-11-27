@@ -182,6 +182,7 @@ impl ServerPeer {
                 opencode_kit::model::Message::User { id, .. } => Some(id.clone()),
                 _ => None,
             })
+            .chain(vault.data.inboxes.values().flat_map(|i| i.items.iter().map(|it| it.id.clone())))
             .collect()
     }
 }
@@ -207,6 +208,20 @@ pub struct Link {
 }
 
 impl Link {
+    /// User message ids in transcripts held locally before joining a peer (plus inbox items).
+    pub(crate) fn local_user_message_ids(&self) -> Vec<String> {
+        self.local
+            .transcripts
+            .values()
+            .flat_map(|t| t.messages.iter())
+            .filter_map(|m| match m {
+                opencode_kit::model::Message::User { id, .. } => Some(id.clone()),
+                _ => None,
+            })
+            .chain(self.local.inboxes.values().flat_map(|i| i.items.iter().map(|it| it.id.clone())))
+            .collect()
+    }
+
     /// Version stamp of this server's `projects`, `sessions`, and `recent_page` cells, whether
     /// held in a shared [`ServerPeer`] vault or stashed locally before joining.
     pub(crate) fn home_data_stamp(&self) -> u64 {

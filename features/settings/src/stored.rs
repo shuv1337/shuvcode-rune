@@ -18,9 +18,10 @@ const RUNE: &str = "rune.settings";
 const LANGUAGE: &str = "language";
 
 /// The flat keys kept in `settings.v3`, and where: (flat key, v3 section, v3 key).
-const SHARED: [(&str, &str, &str); 28] = [
+const SHARED: [(&str, &str, &str); 29] = [
     ("showAgentPicker", "general", "showCustomAgents"),
     ("tabGroups", "general", "tabGroups"),
+    ("automations", "general", "automations"),
     ("foldUserMessages", "general", "foldUserMessages"),
     ("newQuestionUI", "general", "newQuestionUI"),
     ("sharedSidePanel", "general", "sharedSidePanel"),

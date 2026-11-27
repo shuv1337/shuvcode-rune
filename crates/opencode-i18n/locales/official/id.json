@@ -1085,7 +1085,7 @@
   "settings.about.otherContributor.other": "{{count}} lainnya",
   "settings.about.tagline": "AI tidak dapat membuat perangkat lunak yang hebat tanpa Anda",
   "settings.about.trademark": "OpenCode adalah merek dagang terdaftar dari Anomaly Innovations, Inc.",
-  "settings.about.typeset": "Pengesetan di Inter dan IBM Plex Mono",
+  "settings.about.typeset": "Pengesetan di Inter dan OpenMono",
   "settings.about.version": "Versi {{version}}",
   "settings.about.website": "www.opencode.ai",
   "settings.about.writtenByNames": "Ditulis oleh {{names}}",

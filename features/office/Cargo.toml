@@ -15,6 +15,7 @@ library = []
 browser-policy = { path = "../../crates/browser-policy" }
 harness-log = { path = "../../crates/harness-log" }
 bytemuck = { version = "1", features = ["derive"] }
+net-trust = { path = "../../crates/net-trust" }
 office-preview = { path = "../../crates/office-preview" }
 opencode-kernel = { path = "../../crates/opencode-kernel" }
 opencode-ui = { path = "../../crates/opencode-ui" }

@@ -117,6 +117,9 @@ pub struct Settings {
     /// defaulting to `false` across all packaged builds (`local`, `dev`, `beta`, `prod`) to match
     /// upstream `settings/model.tsx:460-463` (`import.meta.env.DEV && VITE_OPENCODE_TEST_FIXTURES !== "1"`).
     pub tab_groups: Option<bool>,
+    /// Experimental Automations screen in sidebar and Home (`general.automations`, opencode#66393):
+    /// `None` until toggled, defaulting to `false` in packaged builds.
+    pub automations: Option<bool>,
     /// Experimental › Sidebar sections (Rune's own, `rune.settings`): multi-select on side tabs,
     /// batch actions and minimal collapsible section headers. `None` until toggled; off by default.
     pub sidebar_sections: Option<bool>,
@@ -202,6 +205,7 @@ impl Default for Settings {
             shared_side_panel: false,
             new_question_ui: false,
             tab_groups: None,
+            automations: None,
             sidebar_sections: None,
             smooth_timeline: false,
             terminal_option_meta: false,
@@ -238,6 +242,9 @@ impl Settings {
         if let (Some(on), Some(m)) = (self.tab_groups, v.as_object_mut()) {
             m.insert("tabGroups".into(), json!(on));
         }
+        if let (Some(on), Some(m)) = (self.automations, v.as_object_mut()) {
+            m.insert("automations".into(), json!(on));
+        }
         if let (Some(on), Some(m)) = (self.sidebar_sections, v.as_object_mut()) {
             m.insert("sidebarSections".into(), json!(on));
         }
@@ -253,6 +260,11 @@ impl Settings {
     /// every build while preserving any explicit `Some(true)` / `Some(false)` saved by the user.
     pub fn tab_groups(&self) -> bool {
         self.tab_groups.unwrap_or(false)
+    }
+
+    /// Experimental › Automations (`general.automations`, opencode#66393): opt-in (`false` by default).
+    pub fn automations(&self) -> bool {
+        self.automations.unwrap_or(false)
     }
 
     fn to_json_base(&self) -> Value {
@@ -318,10 +330,17 @@ impl Settings {
             text_renderer: TextRenderer::parse(v["textRenderer"].as_str()),
             terminal_font: v["terminalFont"].as_u64().map_or(3, |i| (i as usize).min(TERMINAL_FONTS.len() - 1)),
             ui_font: font_index(&UI_FONTS, v["uiFont"].as_str()),
-            code_font: font_index(&CODE_FONTS, v["codeFont"].as_str()),
+            // Previous versions wrote the old default names into `settings.json` even when
+            // untouched; migrate them to the new default OpenMono (`opencode#64797`).
+            code_font: font_index(&CODE_FONTS, v["codeFont"].as_str().filter(|&s| s != "IBM Plex Mono")),
             ui_font_name: custom_name(&UI_FONTS, v["uiFont"].as_str()),
-            code_font_name: custom_name(&CODE_FONTS, v["codeFont"].as_str()),
-            terminal_font_name: v["terminalFontName"].as_str().map(str::trim).unwrap_or("").to_owned(),
+            code_font_name: custom_name(&CODE_FONTS, v["codeFont"].as_str().filter(|&s| s != "IBM Plex Mono")),
+            terminal_font_name: v["terminalFontName"]
+                .as_str()
+                .map(str::trim)
+                .filter(|&s| s != "JetBrainsMono Nerd Font Mono")
+                .unwrap_or("")
+                .to_owned(),
             record_glitches: v["developer"]["rewind"].as_bool().unwrap_or(true),
             // Files from before the setting read as Desktop's default; Desktop nests it under
             // `appearance`, which here is the colour scheme.
@@ -331,6 +350,7 @@ impl Settings {
             shared_side_panel: v["sharedSidePanel"].as_bool().unwrap_or(false),
             new_question_ui: v["newQuestionUI"].as_bool().unwrap_or(false),
             tab_groups: v["tabGroups"].as_bool(),
+            automations: v["automations"].as_bool(),
             sidebar_sections: v["sidebarSections"].as_bool(),
             smooth_timeline: v["smoothTimeline"].as_bool().unwrap_or(false),
             terminal_option_meta: v["terminal"]["optionAsMeta"].as_bool().unwrap_or(false),

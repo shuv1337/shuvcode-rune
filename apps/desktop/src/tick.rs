@@ -156,6 +156,7 @@ pub(crate) fn poll(s: &mut App, now: f64, tx: &mut Tx) -> bool {
     let scheduler = s.kernel.scheduler.clone();
     crate::panels::state::flight::begin_poll(s);
     let changed = scheduler.run_all(s, now, tx);
+    crate::shell::memory_reclaim::poll(s, tx, changed);
     s.finish_tail_change(tx);
     crate::panels::state::flight::end_poll(s, tx);
     changed

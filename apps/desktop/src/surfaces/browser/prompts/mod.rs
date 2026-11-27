@@ -71,6 +71,9 @@ impl Feature<App> for BrowserFeature {
             has_dismissible_bar,
             dismiss_bar,
         ));
+        builder.add_visibility("browser.visibility", |s, shown, _| {
+            s.on_browser_window_visibility(shown);
+        });
     }
 }
 

@@ -20,6 +20,7 @@ const checks = [
   { name: "tables-check", script: join(here, "tables-check.mjs") },
   { name: "plugin-props", script: join(here, "plugin-props.mjs") },
   { name: "external-open", script: join(here, "external-open.mjs") },
+  { name: "net-trust", script: join(here, "net-trust.mjs") },
   { name: "engine-revision", script: join(here, "engine-revision.mjs") },
   { name: "cursor-allow", script: join(here, "cursor-allow.mjs") },
   { name: "fork-boundary", script: join(here, "fork-boundary.mjs") },

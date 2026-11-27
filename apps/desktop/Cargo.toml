@@ -42,6 +42,7 @@ knobs = ["rune-knobs/panel"]
 
 [dependencies]
 base64.workspace = true
+net-trust = { path = "../../crates/net-trust" }
 url.workspace = true
 browser-policy = { path = "../../crates/browser-policy" }
 harness-log = { path = "../../crates/harness-log" }

@@ -22,6 +22,7 @@ mod cache_ref;
 mod early;
 mod machines;
 mod shown;
+mod worker;
 
 pub(crate) use cache_ref::CacheRef;
 pub use early::Early;
@@ -37,7 +38,8 @@ pub struct State {
     histories: Histories,
     /// The session whose timeline stands near its top, told by its scroll viewport.
     near_top: std::rc::Rc<std::cell::RefCell<String>>,
-    wake: Option<Waker>,
+    /// Shared waker slot so `watch_top` closures built before `State::set` still wake the window.
+    wake: std::rc::Rc<std::cell::RefCell<Option<Waker>>>,
     /// The calm "still trying" toast (`machines::Stall`).
     stall: Stall,
     stall_after: Option<Duration>,
@@ -54,16 +56,31 @@ const STALL_AFTER: Duration = Duration::from_secs(30);
 
 impl State {
     pub fn set(&mut self, pages: Pages) {
-        self.wake = pages.wake.clone();
+        *self.wake.borrow_mut() = pages.wake.clone();
         self.histories.clear();
         self.pool = Some(pages);
     }
 
-    /// `App::rest`: the reader's cache keeps only the pages of sessions `keep` says are shown.
-    pub fn rest(&self, keep: &dyn Fn(&str) -> bool) {
+    /// `App::rest`: keeps only pages, histories, gaps, and bridges for sessions `keep` names.
+    pub fn rest(&mut self, keep: &dyn Fn(&str) -> bool) {
+        let server = self.server().to_owned();
         if let Some(pool) = &self.pool && let QueueState::Running(q) = &mut *pool.shared.0.lock().unwrap_or_else(PoisonError::into_inner) {
             q.ready.retain(|p| keep(&p.key.id));
         }
+        self.histories.retain(&server, keep);
+        self.gaps.retain(|id, _| keep(id));
+        self.bridges.retain(|id, _| keep(id));
+    }
+
+    /// Drops one closed session's prefetched page, history, gap, and bridge immediately.
+    pub fn forget(&mut self, id: &str) {
+        let server = self.server().to_owned();
+        if let Some(pool) = &self.pool && let QueueState::Running(q) = &mut *pool.shared.0.lock().unwrap_or_else(PoisonError::into_inner) {
+            q.ready.retain(|p| p.key.id != id);
+        }
+        self.histories.forget(&server, id);
+        self.gaps.remove(id);
+        self.bridges.remove(id);
     }
 
     /// The user messages of the pages in the reader's cache, which a tab shows when it opens.
@@ -79,7 +96,7 @@ impl State {
     }
 
     /// The server the pool reads (its base URL; empty for a fixture's).
-    fn server(&self) -> &str { self.pool.as_ref().map_or("", |p| p.server.as_str()) }
+    pub(crate) fn server(&self) -> &str { self.pool.as_ref().map_or("", |p| p.server.as_str()) }
 
     /// For session `id`'s timeline scroll viewport: standing near its top, the next poll reads
     /// the page before it.
@@ -92,7 +109,8 @@ impl State {
                 *n = id.clone();
                 drop(n);
                 // The scroll may have stopped on this frame; poll without waiting for another.
-                if let Some(wake) = &wake { wake(); }
+                let wake = wake.borrow().clone();
+                if let Some(wake) = wake { wake(); }
             } else if !is && *n == id { n.clear(); }
         }
     }
@@ -120,6 +138,11 @@ impl State {
     /// Whether a page before `id`'s oldest loaded message is still to read.
     pub fn more_above(&self, id: &str) -> bool {
         matches!(self.histories.get(self.server(), id), Some(History::Idle { .. } | History::Loading { .. } | History::Failed { .. }))
+    }
+
+    /// Whether session `id`'s history state is awaiting a `Before(cursor)` page.
+    pub(super) fn awaits_history(&self, id: &str, cursor: &str) -> bool {
+        self.histories.awaits(self.server(), id, cursor)
     }
 
 }
@@ -197,7 +220,7 @@ impl QueueState {
 
 type Shared = Arc<(Mutex<QueueState>, Condvar)>;
 pub type Fetch = Arc<dyn Fn(&str) -> Result<Value, opencode_kit::wire_error::WireError> + Send + Sync>;
-pub type PageResult = Result<Arc<Page>, (Key, opencode_kit::wire_error::WireError)>;
+pub type PageResult = Result<Arc<Page>, (Key, bridge::ReadOf, opencode_kit::wire_error::WireError)>;
 
 pub struct Pages {
     shared: Shared,
@@ -208,7 +231,7 @@ pub struct Pages {
     /// What the web's lanes read with: a page has no threads to wait on the queue, so each
     /// request starts a task that reads what's queued.
     #[cfg(target_arch = "wasm32")]
-    lanes: Option<(Fetch, Sender<PageResult>, Waker)>,
+    lanes: Option<(Fetch, Sender<PageResult>, Waker, Arc<rune::ImageCache>)>,
 }
 
 impl Drop for Pages {
@@ -226,24 +249,24 @@ impl Pages {
         q.ready.extend(ready);
         (Self { shared: Arc::new((Mutex::new(QueueState::Running(Box::new(q))), Condvar::new())), results, wake: None, server: String::new(), #[cfg(target_arch = "wasm32")] lanes: None }, send)
     }
-    pub fn live(server: Server, wake: Waker, early: Option<Early>) -> Self {
+    pub fn live(server: Server, wake: Waker, early: Option<Early>, images: Arc<rune::ImageCache>) -> Self {
         let base = server.base.clone();
-        let mut pages = Self::new(early::fetch(server, early), wake);
+        let mut pages = Self::new(early::fetch(server, early), wake, images);
         pages.server = base;
         pages
     }
 
-    pub fn new(fetch: Fetch, wake: Waker) -> Self {
+    pub fn new(fetch: Fetch, wake: Waker, images: Arc<rune::ImageCache>) -> Self {
         let shared = Arc::new((Mutex::new(QueueState::default()), Condvar::new()));
         let (out, results) = channel();
         #[cfg(target_arch = "wasm32")]
-        return Self { shared, results, wake: Some(wake.clone()), server: String::new(), lanes: Some((fetch, out, wake)) };
+        return Self { shared, results, wake: Some(wake.clone()), server: String::new(), lanes: Some((fetch, out, wake, images)) };
         #[cfg(not(target_arch = "wasm32"))]
         {
             for foreground in [true, false] {
-                let (q, fetch, out, wake) = (shared.clone(), fetch.clone(), out.clone(), wake.clone());
+                let (q, fetch, out, wake, images) = (shared.clone(), fetch.clone(), out.clone(), wake.clone(), images.clone());
                 let name = format!("session-{}", if foreground { "open" } else { "prefetch" });
-                if let Err(e) = std::thread::Builder::new().name(name.clone()).spawn(move || worker(q, fetch, out, wake, foreground)) {
+                if let Err(e) = std::thread::Builder::new().name(name.clone()).spawn(move || worker::worker(q, fetch, out, wake, images, foreground)) {
                     eprintln!("opencode-rune: couldn't spawn {name} thread: {e}");
                 }
             }
@@ -286,18 +309,21 @@ impl Pages {
     fn enqueue(&self, job: Job) {
         let mut guard = self.shared.0.lock().unwrap_or_else(PoisonError::into_inner);
         let QueueState::Running(q) = &mut *guard else { return };
+        let speculative = !job.foreground && job.cursor.is_none();
         q.failed.retain(|_, until| *until > Instant::now());
-        if !job.foreground && q.failed.contains_key(&job.key) { return; }
-        if job.cursor.is_none() && !job.foreground && q.ready.iter().any(|p| p.key == job.key) { return; }
+        if speculative && q.failed.contains_key(&job.key) { return; }
+        if speculative && q.ready.iter().any(|p| p.key == job.key) { return; }
         if q.active.contains(&(job.key.clone(), job.cursor.clone())) { return; }
-        if let Some(old) = q.jobs.iter_mut().find(|j| j.key.id == job.key.id && j.cursor == job.cursor) {
+        if let Some(old) = q.jobs.iter_mut().find(|j| j.key.id == job.key.id && j.cursor == job.cursor && j.one == job.one) {
             old.foreground |= job.foreground;
+            old.limit = old.limit.max(job.limit);
             if job.key.updated > old.key.updated { old.key = job.key; }
         } else {
-            // A pointer sweeping the list cannot leave an unbounded speculative backlog.
-            if !job.foreground
-                && q.jobs.iter().filter(|j| !j.foreground).count() >= ENTRIES
-                && let Some(i) = q.jobs.iter().position(|j| !j.foreground)
+            // A pointer sweeping the list cannot leave an unbounded speculative backlog, and must
+            // never evict an explicit history/bridge read.
+            if speculative
+                && q.jobs.iter().filter(|j| !j.foreground && j.cursor.is_none()).count() >= ENTRIES
+                && let Some(i) = q.jobs.iter().position(|j| !j.foreground && j.cursor.is_none())
             {
                 q.jobs.remove(i);
             }
@@ -306,13 +332,12 @@ impl Pages {
         self.shared.1.notify_all();
         drop(guard);
         #[cfg(target_arch = "wasm32")]
-        if let Some((fetch, out, wake)) = self.lanes.clone() {
+        if let Some((fetch, out, wake, images)) = self.lanes.clone() {
             let shared = self.shared.clone();
             rune::task::spawn("session-pages", move || {
-                let images = rune::ImageCache::new(wake.clone());
                 for foreground in [true, false] {
-                    while let Some(job) = take_now(&shared, foreground) {
-                        if !read(&shared, &fetch, &out, &wake, &images, foreground, job) { return; }
+                    while let Some(job) = worker::take_now(&shared, foreground) {
+                        if !worker::read(&shared, &fetch, &out, &wake, &images, foreground, job) { return; }
                     }
                 }
             })
@@ -321,142 +346,8 @@ impl Pages {
     }
 }
 
-/// The silence timer's clock: the interaction fuzzer's virtual one under it.
-fn now() -> Instant {
-    Instant::now()
-}
+fn now() -> Instant { Instant::now() }
 
-#[cfg(not(target_arch = "wasm32"))]
-fn worker(q: Shared, fetch: Fetch, out: Sender<PageResult>, wake: Waker, foreground: bool) {
-    let images = rune::ImageCache::new(wake.clone());
-    loop {
-        let job = {
-            let mut state = q.0.lock().unwrap_or_else(PoisonError::into_inner);
-            loop {
-                let QueueState::Running(inner) = &mut *state else { return };
-                // Newest hover first; foreground has its own lane and never queues behind history.
-                if let Some(i) = inner.jobs.iter().rposition(|j| j.foreground == foreground)
-                    && let Some(job) = inner.jobs.remove(i)
-                {
-                    inner.active.insert((job.key.clone(), job.cursor.clone()));
-                    break job;
-                }
-                state = q.1.wait(state).unwrap_or_else(PoisonError::into_inner);
-            }
-        };
-        if !read(&q, &fetch, &out, &wake, &images, foreground, job) { return; }
-    }
-}
-
-/// The next job for the lane, if one waits: the web's lanes take what's queued and stop.
-#[cfg(target_arch = "wasm32")]
-fn take_now(q: &Shared, foreground: bool) -> Option<Job> {
-    let mut state = q.0.lock().unwrap_or_else(PoisonError::into_inner);
-    let QueueState::Running(inner) = &mut *state else { return None };
-    let i = inner.jobs.iter().rposition(|j| j.foreground == foreground)?;
-    let job = inner.jobs.remove(i)?;
-    inner.active.insert((job.key.clone(), job.cursor.clone()));
-    Some(job)
-}
-
-/// Reads `job` from the server and hands each page to `out`; false
-/// when the pool stopped meanwhile.
-#[allow(clippy::too_many_arguments)]
-fn read(q: &Shared, fetch: &Fetch, out: &Sender<PageResult>, wake: &Waker, images: &rune::ImageCache, foreground: bool, job: Job) -> bool {
-    {
-        let publish = |value: &Value, mut read: crate::telemetry::Read| {
-            let parsing = Instant::now();
-            let messages = if job.one { model::parse_message(&value["data"]).into_iter().collect() } else { model::parse_messages(value) };
-            let preparing = Instant::now();
-            let prepared = if job.cursor.is_none() { crate::attachments::prepare_images(&messages, images) } else { vec![] };
-            let done = Instant::now();
-            (read.parse, read.images, read.messages) = (Some((parsing, preparing)), Some((preparing, done)), messages.len());
-            (read.inline_images, read.inline_image_bytes) = crate::attachments::inline_images(&messages);
-            read.prepared = prepared.iter().map(|p| p.handle()).collect();
-            read.thread = std::thread::current().name().unwrap_or("").to_owned();
-            let page = Arc::new(Page {
-                key: job.key.clone(), messages, stubs: crate::context_window::stubs(value), asked: job.limit,
-                cursor: value["cursor"]["next"].as_str().map(str::to_owned), history: job.cursor.is_some(), read_of: bridge::ReadOf::of(job.cursor.as_deref(), job.one),
-                bytes: serde_json::to_vec(value).map_or(0, |v| v.len()) + prepared.iter().map(|p| p.weight()).sum::<usize>(),
-                images: prepared,
-                read,
-            });
-            if !page.history {
-                let mut state = q.0.lock().unwrap_or_else(PoisonError::into_inner);
-                if let QueueState::Running(inner) = &mut *state
-                    && inner.ready.iter().all(|p| p.key.id != page.key.id || p.key.updated <= page.key.updated)
-                {
-                    inner.ready.retain(|p| p.key.id != page.key.id);
-                    inner.ready.push_back(page.clone());
-                    while inner.ready.len() > ENTRIES || inner.ready.iter().map(|p| p.bytes).sum::<usize>() > MEMORY_BYTES {
-                        inner.ready.pop_front();
-                    }
-                }
-            }
-            if out.send(Ok(page)).is_ok() { wake(); }
-        };
-        let path = match &job.cursor {
-            Some(message) if job.one => format!("/api/session/{}/message/{message}", job.key.id),
-            Some(cursor) => format!("/api/session/{}/message?limit={}&cursor={}", job.key.id, job.limit, crate::switcher::encode(cursor)),
-            None => format!("/api/session/{}/message?limit={}&order=desc", job.key.id, job.limit),
-        };
-        // The launch trace splits the server's part of content live from the app's: the first
-        // foreground newest page asked for (the open session's) and its answer.
-        let first = foreground && job.cursor.is_none();
-        if first { rune::marks::mark("session.read.sent"); }
-        let mut start = Instant::now();
-        crate::telemetry::take_read();
-        let mut answer = fetch(&path);
-        // A server that is frozen or restarting gets asked again, quietly, while the open
-        // session stays as it is; the app speaks up only if the silence lasts (`State::stalled`).
-        for attempt in 0.. {
-            let Err(error) = &answer else { break };
-            if !foreground || !error.transient() { break; }
-            eprintln!("opencode-rune: session read failed, retrying: {error}");
-            q.0.lock().unwrap_or_else(PoisonError::into_inner).step(QueueEvent::Health(LaneHealthEvent::TransientFailure(now())));
-            wake();
-            if !pause(q, backoff(attempt)) { return false; }
-            start = Instant::now();
-            crate::telemetry::take_read();
-            answer = fetch(&path);
-        }
-        if answer.is_ok() { q.0.lock().unwrap_or_else(PoisonError::into_inner).step(QueueEvent::Health(LaneHealthEvent::Answered)); }
-        match answer {
-            Ok(value) => {
-                if first { rune::marks::mark("session.read.received"); }
-                let end = Instant::now();
-                let mut read = crate::telemetry::Read { source: "server", fetch: Some((start, end)), ..Default::default() };
-                if let Some((first_byte, bytes, parsing)) = crate::telemetry::take_read() {
-                    (read.first_byte, read.bytes, read.json) = (Some(first_byte), bytes, Some((parsing, end)));
-                    read.fetch = Some((start, parsing));
-                }
-                publish(&value, read);
-            }
-            Err(error) => {
-                if let QueueState::Running(inner) = &mut *q.0.lock().unwrap_or_else(PoisonError::into_inner) { inner.failed.insert(job.key.clone(), Instant::now() + Duration::from_secs(30)); }
-                if out.send(Err((job.key.clone(), error))).is_ok() { wake(); }
-            }
-        }
-        if let QueueState::Running(inner) = &mut *q.0.lock().unwrap_or_else(PoisonError::into_inner) { inner.active.remove(&(job.key, job.cursor)); }
-    }
-    true
-}
-
-/// 2 s, 4 s, then 8 s between reads (tens of milliseconds under test).
-fn backoff(attempt: u32) -> Duration {
-    let unit = Duration::from_secs(1);
-    unit * (2u32 << attempt.min(2))
-}
-
-/// Sleeps `total`; false if the pool stopped meanwhile.
-fn pause(q: &Shared, total: Duration) -> bool {
-    let until = Instant::now() + total;
-    while Instant::now() < until {
-        if !q.0.lock().unwrap_or_else(PoisonError::into_inner).is_running() { return false; }
-        rune::task::sleep(Duration::from_millis(10).min(until - Instant::now()));
-    }
-    q.0.lock().unwrap_or_else(PoisonError::into_inner).is_running()
-}
 
 impl crate::App {
     pub fn cancel_open(&mut self, tx: &mut rune::Tx) {
@@ -651,12 +542,19 @@ impl crate::App {
             self.timeline_fx.ends.progress(id);
         }
         if page.history {
-            // A page that added nothing ends it too, so a server that keeps handing out cursors
-            // can't loop (`history-machine.ts` `stalled`).
+            // A page whose oldest raw server message didn't move strictly earlier (or repeated its
+            // own cursor) stops paging instead of looping (`history-machine.ts` `stalled`). Tracking
+            // raw server `stubs` keeps paging across pages of non-rendered message types (`synthetic`,
+            // `system`, `idle`) and when history re-enters on an already-populated shared transcript.
             let id = id.clone();
-            self.step_history(&id, HistoryEvent::Landed { cursor: page.cursor.clone(), added }, tx);
+            if let bridge::ReadOf::Before(sent) = &page.read_of {
+                let oldest = crate::context_window::oldest_position(&page.stubs);
+                self.step_history(&id, HistoryEvent::Landed { sent, cursor: page.cursor.clone(), oldest, added }, tx);
+            }
             // Where the page leaves the reader is reported next frame; read on only from there.
-            self.pages.near_top.borrow_mut().clear();
+            let mut near = self.pages.near_top.borrow_mut();
+            if *near == *id { near.clear(); }
+            drop(near);
             self.context_window_landed(&id);
         }
         self.window_read(&page.key.id, &page.stubs, page.history, page.cursor.is_none() || page.stubs.len() < page.asked);
@@ -668,7 +566,8 @@ impl crate::App {
         if self.route == crate::Route::here(id.clone()) && !page.history && let Some(cursor) = &page.cursor {
             // Give the latest page its first frame before expanding history.
             let id = id.clone();
-            self.step_history(&id, HistoryEvent::Latest { key: page.key.clone(), cursor, now: Instant::now() }, tx);
+            let oldest = crate::context_window::oldest_position(&page.stubs);
+            self.step_history(&id, HistoryEvent::Latest { key: page.key.clone(), cursor, oldest, now: Instant::now() }, tx);
         }
     }
 
@@ -684,7 +583,11 @@ impl crate::App {
                     if let Some(pages) = &self.pages.pool { pages.history(key, cursor, limit); }
                 }
                 HistoryEffect::WakeAfter(after) => tx.wake_after(after),
-                HistoryEffect::Settle => session_view::jump::settle(self, tx),
+                HistoryEffect::Settle => {
+                    if self.route == crate::Route::here(id.to_owned()) {
+                        session_view::jump::settle(self, tx);
+                    }
+                }
                 HistoryEffect::Repaint => changed = true,
             }
         }
@@ -703,11 +606,11 @@ impl crate::App {
             }
             match result {
                 Ok(page) if self.route == crate::Route::here(page.key.id.clone()) || self.opening.as_ref().is_some_and(|o| o.id == page.key.id) || (page.history && self.transcripts.contains_key(&page.key.id)) => { self.show_page(&page, tx); changed = true; }
-                Err((key, error)) if self.opening.as_ref().is_some_and(|o| o.id == key.id) && error.status() == Some(404) => {
+                Err((key, bridge::ReadOf::Newest, error)) if self.opening.as_ref().is_some_and(|o| o.id == key.id) && error.status() == Some(404) => {
                     *self.opening = None;
                     changed |= crate::session_state::missing(self, &key.id, tx);
                 }
-                Err((key, error)) if self.opening.as_ref().is_some_and(|o| o.id == key.id) => {
+                Err((key, bridge::ReadOf::Newest, error)) if self.opening.as_ref().is_some_and(|o| o.id == key.id) => {
                     *self.diag.status = error.to_string();
                     // What the timeline's loading row says: why, from the typed error (`crate::errors`).
                     let server = crate::servers::runtime::label(crate::servers::runtime::active(self));
@@ -720,16 +623,28 @@ impl crate::App {
                     }
                     changed = true;
                 }
-                Err((key, error)) if self.route == crate::Route::here(key.id.clone()) && error.status() == Some(404) => {
+                Err((key, bridge::ReadOf::Newest, error)) if self.route == crate::Route::here(key.id.clone()) && error.status() == Some(404) => {
                     changed |= crate::session_state::missing(self, &key.id, tx);
                 }
-                Err((key, error)) if self.route == crate::Route::here(key.id.clone()) => {
-                    // A failure while its older page loads fails that page (its cooldown, then a retry).
-                    changed |= self.step_history(&key.id, HistoryEvent::Failed { now: Instant::now() }, tx);
+                Err((key, bridge::ReadOf::Newest, error)) if self.route == crate::Route::here(key.id.clone()) => {
+                    self.pages.bridges.remove(&key.id);
                     // A busy server is waited out; only silence that lasts is told (below).
                     if error.transient() { eprintln!("opencode-rune: session read failed: {error}"); continue; }
                     crate::status_toast::failed_wire(self, "Couldn't load this session", &error);
                     changed = true;
+                }
+                Err((key, bridge::ReadOf::Before(cursor), error)) => {
+                    // Always settle an in-flight bridge or history read even after switching tabs,
+                    // so `History::Filling` / `Loading` never hang until timeout.
+                    if self.pages.bridges.get(&key.id).is_some_and(|h| h.awaits(&cursor)) {
+                        self.pages.bridges.remove(&key.id);
+                    }
+                    changed |= self.step_history(&key.id, HistoryEvent::Failed { sent: &cursor, now: Instant::now() }, tx);
+                    if self.route == crate::Route::here(key.id.clone()) {
+                        if error.transient() { eprintln!("opencode-rune: session read failed: {error}"); continue; }
+                        crate::status_toast::failed_wire(self, "Couldn't load this session", &error);
+                        changed = true;
+                    }
                 }
                 _ => {}
             }

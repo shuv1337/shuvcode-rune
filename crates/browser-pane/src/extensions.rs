@@ -654,12 +654,13 @@ impl BrowserHost {
             frame::draw(node, surface)
                 .surface_anchor(Align::Start, Align::Start)
                 .surface_unscaled(true)
-                .on_layout(move |s: &mut S, [_, _, w, h]| {
+                .on_layout_tx(move |s: &mut S, [_, _, w, h], tx| {
                     let host = access(s);
                     let width_pt = (w * z).max(POPUP_MIN_W as f32);
                     let height_pt = (h * z).max(POPUP_MIN_H as f32);
                     let sc = scale.max(1.0);
                     host.send(HostMsg::Resize { tab_id, width_pt, height_pt, scale: sc });
+                    tx.live_only();
                 })
                 .on_pointer_move_local(move |s: &mut S, p: PointerEvent, tx| {
                     access(s).send(HostMsg::MouseMove {
@@ -671,7 +672,7 @@ impl BrowserHost {
                     });
                     tx.live_only();
                 })
-                .on_hover_change(move |s: &mut S, inside: bool, _| {
+                .on_hover_change(move |s: &mut S, inside: bool, tx| {
                     if !inside {
                         access(s).send(HostMsg::MouseMove {
                             tab_id,
@@ -681,6 +682,7 @@ impl BrowserHost {
                             leave: true,
                         });
                     }
+                    tx.live_only();
                 })
                 .on_drag(move |s: &mut S, d: &mut Drag, tx| {
                     let mods = pack_mods(tx.mods());
@@ -699,25 +701,31 @@ impl BrowserHost {
                                 mods,
                             });
                         }
-                        Phase::Move => host.send(HostMsg::MouseMove {
-                            tab_id,
-                            x: d.x * z,
-                            y: d.y * z,
-                            mods,
-                            leave: false,
-                        }),
-                        Phase::Up => host.send(HostMsg::MouseButton {
-                            tab_id,
-                            x: d.x * z,
-                            y: d.y * z,
-                            button: btn,
-                            up: true,
-                            clicks: d.clicks.clamp(1, 3),
-                            mods,
-                        }),
+                        Phase::Move => {
+                            host.send(HostMsg::MouseMove {
+                                tab_id,
+                                x: d.x * z,
+                                y: d.y * z,
+                                mods,
+                                leave: false,
+                            });
+                            tx.live_only();
+                        }
+                        Phase::Up => {
+                            host.send(HostMsg::MouseButton {
+                                tab_id,
+                                x: d.x * z,
+                                y: d.y * z,
+                                button: btn,
+                                up: true,
+                                clicks: d.clicks.clamp(1, 3),
+                                mods,
+                            });
+                            tx.live_only();
+                        }
                     }
                 })
-                .on_wheel(move |s: &mut S, w: WheelEvent, _| {
+                .on_wheel(move |s: &mut S, w: WheelEvent, tx| {
                     access(s).send(HostMsg::Wheel {
                         tab_id,
                         x: w.x * z,
@@ -726,20 +734,36 @@ impl BrowserHost {
                         dy: w.dy,
                         mods: pack_mods(w.mods),
                     });
+                    tx.live_only();
                     true
                 })
-                .on_key(move |s: &mut S, ev: &KeyEvent, _| {
+                .on_key(move |s: &mut S, ev: &KeyEvent, tx| {
                     if ev.key == Key::Escape {
                         access(s).close_extension_popup();
                         return true;
                     }
-                    access(s).forward_key(tab_id, ev, true)
+                    match access(s).forward_key(tab_id, ev, true) {
+                        crate::client::KeyForward::Ignored => false,
+                        crate::client::KeyForward::Forwarded => {
+                            tx.live_only();
+                            true
+                        }
+                        crate::client::KeyForward::StateChanged => true,
+                    }
                 })
-                .on_key_up(move |s: &mut S, ev: &KeyEvent, _| {
+                .on_key_up(move |s: &mut S, ev: &KeyEvent, tx| {
                     if ev.key == Key::Escape {
+                        tx.live_only();
                         return true;
                     }
-                    access(s).forward_key(tab_id, ev, false)
+                    match access(s).forward_key(tab_id, ev, false) {
+                        crate::client::KeyForward::Ignored => false,
+                        crate::client::KeyForward::Forwarded => {
+                            tx.live_only();
+                            true
+                        }
+                        crate::client::KeyForward::StateChanged => true,
+                    }
                 }),
         )
     }

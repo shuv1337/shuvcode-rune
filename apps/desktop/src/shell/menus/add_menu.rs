@@ -175,7 +175,7 @@ impl App {
         match &*self.route {
             Route::Draft(_) => true,
             Route::Session { id, .. } => self.session(id).is_none_or(|i| i.parent.is_none()),
-            Route::Home => false,
+            Route::Home | Route::Automations => false,
         }
     }
 

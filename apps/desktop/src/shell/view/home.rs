@@ -135,7 +135,7 @@ pub(crate) fn home(s: &App, p: &Pal, [panel_w, panel_h]: [f32; 2], window: [f32;
     page = page.child(col().key("home-body").w_full().grow(1.0).shrink().min_h(0.0).child(scroller).children(tip::tip(s, p)));
     if tier == Tier::Medium && !project_scope {
         // `hidden shrink-0 px-3 py-2 md:block lg:hidden`: a row, Settings and Help at its ends.
-        page = page.child(projects::utility(p, false).key("home-utility-foot").px(12.0).py(8.0));
+        page = page.child(projects::utility(s, p, false).key("home-utility-foot").px(12.0).py(8.0));
     }
     page
 }

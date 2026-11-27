@@ -28,7 +28,7 @@ mod openers;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod preview;
 #[cfg(not(target_arch = "wasm32"))]
-mod poll;
+pub mod poll;
 #[cfg(not(target_arch = "wasm32"))]
 mod preview_pool;
 #[cfg(not(target_arch = "wasm32"))]
@@ -60,6 +60,7 @@ mod web {
 
     impl BrowserHost {
         pub fn set_color_scheme(&self, _: bool) {}
+        pub fn set_display_hz(&self, _: f64) {}
     }
 
     #[derive(Default)]
@@ -103,6 +104,12 @@ mod web {
         pub fn browser_agent_pages_enabled(&self) -> bool {
             true
         }
+
+        pub fn sync_visible_browser_tabs(&mut self) {}
+
+        pub fn set_browser_window_minimized(&mut self, _: bool) {}
+
+        pub fn close_browser_tabs_for_session(&mut self, _: &str) {}
     }
 }
 
@@ -174,6 +181,11 @@ mod native {
         pub site_detailed: bool,
         /// Live Shift key state tracked in `home_modifiers` for synchronous Shift+Click checks.
         pub shift_held: bool,
+        /// Window visibility and close-slide grace state for multi-pane browser throttling.
+        pub visibility: super::poll::BrowserVisibilityState,
+        /// Browser tab IDs rendered via `ui.browserSurface` inside each visible `(panel_sid, panel_key)`
+        /// (ensures third-party plugins rendering browser surfaces stay awake while visible).
+        pub panel_surfaces: std::cell::RefCell<HashMap<(String, String), Vec<u64>>>,
     }
 
     pub use super::keys::claims_app_shortcut;
@@ -720,6 +732,7 @@ mod native {
 
         /// Page `id`'s tab left its strip: the page closes and any preview server binding revokes.
         pub fn forget_browser_tab(&mut self, id: u64) {
+            self.prune_panel_surface_tab(id);
             self.forget_tab_marks(id);
             self.workspace_panes.browser.active_app_reviews.borrow_mut().remove(&id);
             self.workspace_panes.browser.openers.on_close(id);

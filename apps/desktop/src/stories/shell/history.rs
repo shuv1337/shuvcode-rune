@@ -43,6 +43,7 @@ pub fn view(s: &App, p: &Pal) -> El {
         let here = i == s.nav.index();
         let name = match &place.route {
             Route::Home => "Home".to_owned(),
+            Route::Automations => "Automations".to_owned(),
             Route::Draft(_) => "New session".to_owned(),
             Route::Session { id, .. } => s.session(id).map_or(id.clone(), |x| x.title.chars().take(18).collect()),
         };

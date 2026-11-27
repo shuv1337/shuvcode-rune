@@ -135,7 +135,7 @@ fn fetch(lua: &Lua, a: MultiValue, done: Completer) -> mlua::Result<()> {
 
 fn send(r: &spec::HttpRequest) -> Data {
     let timeout = Duration::from_secs_f64(r.timeout.unwrap_or(30.0).max(0.1));
-    let agent: ureq::Agent = ureq::Agent::config_builder().timeout_global(Some(timeout)).http_status_as_error(false).build().into();
+    let agent: ureq::Agent = net_trust::agent_config().timeout_global(Some(timeout)).http_status_as_error(false).build().into();
     let method = r.method.map_or("GET", |m| m.as_str());
     let mut req = ureq::http::Request::builder().method(method).uri(r.url.as_str());
     for (k, v) in r.headers.iter().flatten() {

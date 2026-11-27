@@ -160,6 +160,7 @@ fn start_tabs_open(
             "The workspace file is outside this session's workspace or cannot be read.",
         ));
     };
+    super::super::hold::acquire_now(att, app, host_id);
     att.ensure_tab_cdp(app, host_id);
     let _ = att.sync_tabs(app);
     let Some(wire_tab_id) = att.host_to_wire.get(&host_id).cloned() else {
@@ -475,6 +476,7 @@ fn start_preview(
         if let Err(o) = check_page_guards(app, hid, "navigate") {
             return StepOutcome::Done(o);
         }
+        super::super::hold::acquire_now(att, app, hid);
         app.workspace_panes.browser.host.set_agent_driven(hid, true);
         app.reopen_resolved_preview_tab(hid, Some(&att.session_id), &display_url, spec);
         (hid, wid, false)
@@ -487,6 +489,7 @@ fn start_preview(
             true,
             Some(browser_pane::TabDriver::Agent),
         );
+        super::super::hold::acquire_now(att, app, hid);
         att.ensure_tab_cdp(app, hid);
         let _ = att.sync_tabs(app);
         let Some(wid) = att.host_to_wire.get(&hid).cloned() else {

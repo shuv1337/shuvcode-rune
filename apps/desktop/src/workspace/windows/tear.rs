@@ -268,6 +268,28 @@ impl App {
     fn tab_moved_out(&mut self, key: &str, tx: &mut Tx) {
         let Some(i) = self.tab_at(key) else { return };
         let shown = self.current_tab() == Some(self.tabs[i].uid());
+        // Collect and close browser tabs owned by the moved-out session (and its non-tabbed
+        // subagents) BEFORE `self.tabs.remove(i)` so `panel_root` resolves subagent strips cleanly
+        // and without polluting `ClosedSideTab` (`⇧⌘T`) history.
+        let id = self.tabs[i].id.clone();
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let moved_sids: Vec<String> = self
+                .workspace_panes
+                .browser
+                .session_tabs
+                .keys()
+                .filter(|sid| {
+                    sid.as_str() == id.as_str()
+                        || (crate::launch::saved::page_tab::root_of(self, sid) == id.as_str()
+                            && !self.tabs.iter().any(|t| !t.is_draft() && t.id == **sid))
+                })
+                .cloned()
+                .collect();
+            for sid in moved_sids {
+                self.close_browser_tabs_for_session(&sid);
+            }
+        }
         let id = self.tabs.remove(i).id;
         let r = self.kernel.slots.get_mut(&crate::restore::RESTORE);
         r.drafts.remove(&id);

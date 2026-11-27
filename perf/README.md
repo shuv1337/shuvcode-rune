@@ -120,6 +120,7 @@ bun perf/linux-launch.ts /usr/bin/opencode-rune        # or the path of an unpac
 | `warm` | A later launch, everything in memory. |
 
 - With no OpenCode server at `OPENCODE_LAUNCH_SERVER_SMALL` the app has nothing to list: `content.live` is left out and each launch ends by the app's own fallback, about 12 s after it starts (the whole run takes about 4 minutes).
-- The first launch of the home downloads the browser engine in the background (350 MB) and keeps it for the later ones. `OPENCODE_LAUNCH_SCRATCH` moves the home.
+- A published build's first launch of the home downloads the browser engine in the background (350 MB) and keeps it for the later ones; a build made without the release's engine pin fetches none. `OPENCODE_LAUNCH_SCRATCH` moves the home.
+- A launch that goes wrong is listed under the table: how long the process ran, how it ended, and the app's last word on stderr. The app writes its trace as the last step of its quit, so a launch whose window came up and whose quit then stalled is counted by the marks it printed and listed as "the quit wrote no trace"; one that printed no mark drew nothing and is not counted.
 - The app's clock on Linux starts at `/proc/self/stat`'s start time, which has 10 ms steps; the script counts from its own spawn call and `main.entered`'s wall-clock time instead.
 - `launch.bench.ts` on Linux: `cold` and `first-new-build` drop the new file's pages (`linux-pages.ts`), `warm` and `first` read the exe into the page cache. Not run under strobe on Linux yet (24 Nov 2026): no Linux machine with a display; the published build starts under headless weston, headless sway and Xvfb, where the GPU is llvmpipe and nothing after `gpu.begin` says anything about a real GPU.

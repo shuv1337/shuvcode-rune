@@ -89,7 +89,7 @@ pub fn poll() -> bool {
 }
 
 fn fetch(url: &str) -> Result<Vec<u8>, String> {
-    let agent: ureq::Agent = ureq::Agent::config_builder().timeout_global(Some(std::time::Duration::from_secs(300))).build().into();
+    let agent: ureq::Agent = net_trust::agent_config().timeout_global(Some(std::time::Duration::from_secs(300))).build().into();
     let mut resp = agent.get(url).call().map_err(|e| e.to_string())?;
     resp.body_mut().with_config().limit(16 << 20).read_to_vec().map_err(|e| e.to_string())
 }

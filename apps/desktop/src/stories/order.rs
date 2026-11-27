@@ -120,5 +120,6 @@ pub(crate) const ORDER: &[&str] = &[
     "Timeline/Open tool step",
     "Dialogs/Usage",
     "Home/Automation fold",
+    "Shell/Automations",
     "Windows/Tab from another window",
 ];

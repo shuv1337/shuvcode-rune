@@ -46,8 +46,10 @@ pub fn view<H: ProjectSwitcherHost + 'static>(s: &H, p: &Pal, cx: &Cx<H>) -> [El
     let (placeholder, step_title) = step_meta(&open.mode);
 
     // Every step past the first steps back from the search field's arrow (`dialog.tsx`:
-    // `view().ownsEscape`), the worktree step too (opencode#66090).
-    let leading = if !matches!(open.mode, StepMode::Projects) {
+    // `view().ownsEscape`), the worktree step too (opencode#66090). A dialog opened on one
+    // project's worktrees alone has no step to go back to (`step().history.length > 0`,
+    // opencode#66096).
+    let leading = if !matches!(open.mode, StepMode::Projects) && !open.history.is_empty() {
         search_back_shell(p).on_press_tx(|s: &mut H, tx: &mut Tx| super::back(s, tx))
     } else {
         icon(&ic::MAGNIFYING_GLASS, 16.0).color(p.icon_muted)

@@ -114,6 +114,7 @@ pub fn surface(s: &App, p: &Pal, tab_id: u64, scale: f32) -> Option<El> {
         }
         EngineStatus::Unchecked | EngineStatus::Installed | EngineStatus::Connecting | EngineStatus::Ready => {
             let tab = s.workspace_panes.browser.host.tab(tab_id)?;
+            super::poll::note_surface_drawn(tab.id);
             let bars = super::prompts::view_bars(s, p, tab.id);
             let modal = super::prompts::view_modal(s, p, tab.id);
             let ext_popup = s
@@ -152,9 +153,14 @@ pub fn surface(s: &App, p: &Pal, tab_id: u64, scale: f32) -> Option<El> {
                 .grow(1.0)
                 .min_h(0.0)
                 .w_full()
-                .on_layout(|app: &mut App, [_, _, w, h]| {
+                .on_layout_tx(|app: &mut App, [_, _, w, h], tx| {
                     app.workspace_panes.browser.overlay.set_pane_size(w, h);
                     app.workspace_panes.browser.host.set_pane_size(w, h);
+                    if matches!(app.workspace_panes.browser.overlay.state, super::comment::Overlay::Idle)
+                        && app.workspace_panes.browser.host.popup_tab_id().is_none()
+                    {
+                        tx.live_only();
+                    }
                 })
                 .child(s.workspace_panes.browser.host.surface_el("browser-surface", tab.id, scale / *s.zoom, *s.zoom, |app: &mut App| &mut app.workspace_panes.browser.host, App::focus_browser_page))
                 .children(ext_popup)

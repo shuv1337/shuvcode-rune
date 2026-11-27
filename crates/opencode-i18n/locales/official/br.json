@@ -1105,7 +1105,7 @@
   "settings.about.otherContributor.other": "{{count}} outros",
   "settings.about.tagline": "A IA não consegue criar um ótimo software sem você",
   "settings.about.trademark": "OpenCode é uma marca registrada da Anomaly Innovations, Inc.",
-  "settings.about.typeset": "Composto em Inter e IBM Plex Mono",
+  "settings.about.typeset": "Composto em Inter e OpenMono",
   "settings.about.version": "Versão {{version}}",
   "settings.about.website": "www.opencode.ai",
   "settings.about.writtenByNames": "Escrito por {{names}}",

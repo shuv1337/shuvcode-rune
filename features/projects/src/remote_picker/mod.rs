@@ -27,6 +27,8 @@ use crate::{REMOTE_PICKER_OVERLAY_ID, clean_dir};
 
 /// What runs with the folder picked.
 pub type OnPick = Rc<dyn Fn(&mut dyn ProjectsHost, String, &mut Tx)>;
+/// What runs when a pick ends with nothing.
+pub type OnCancel = Rc<dyn Fn(&mut dyn ProjectsHost, &mut Tx)>;
 
 /// The dialog's open/closed phase (`DirectoryPickerDialog`).
 #[derive(Default)]
@@ -98,6 +100,7 @@ pub struct Open {
     git: BTreeSet<String>,
     seq: Seq,
     on_pick: OnPick,
+    on_cancel: Option<OnCancel>,
 }
 
 /// One folder's children (`PickerNode`).
@@ -146,6 +149,12 @@ impl Tree {
 
 /// Picks a folder on server `server`, then runs `on_pick` with it.
 pub fn pick(host: &mut dyn ProjectsHost, server: &ServerKey, title: String, tx: &mut Tx, on_pick: OnPick) {
+    pick_settling(host, server, title, tx, on_pick, None);
+}
+
+/// [`pick`], and `on_cancel` runs when the pick ends with nothing: Cancel, Escape, a press
+/// outside, a folder dialog that failed, another pick taking its place, or its server going.
+pub fn pick_settling(host: &mut dyn ProjectsHost, server: &ServerKey, title: String, tx: &mut Tx, on_pick: OnPick, on_cancel: Option<OnCancel>) {
     let entry = host.listed_servers().into_iter().find(|e| e.key() == *server);
     let own = host.own_server_base();
     let local = entry.as_ref().is_none_or(|e| e.conn.local(own.as_deref())) || !host.is_live();
@@ -155,16 +164,26 @@ pub fn pick(host: &mut dyn ProjectsHost, server: &ServerKey, title: String, tx: 
         host.open_folder_dialog(
             options,
             tx,
-            Box::new(move |h, result, tx| match result {
-                Ok(Some(path)) => on_pick(h, clean_dir(&path.to_string_lossy()), tx),
-                Ok(None) => {}
-                Err(e) => h.toast_fail(opencode_i18n::t!("rune.status.folderPickerFailed"), &e),
+            Box::new(move |h, result, tx| {
+                match result {
+                    Ok(Some(path)) => return on_pick(h, clean_dir(&path.to_string_lossy()), tx),
+                    Ok(None) => {}
+                    Err(e) => h.toast_fail(opencode_i18n::t!("rune.status.folderPickerFailed"), &e),
+                }
+                if let Some(cancel) = &on_cancel {
+                    cancel(h, tx);
+                }
             }),
         );
         return;
     }
     // Without a connection to it the picker would open on nothing: the pick ends there.
-    let Some(conn) = entry.as_ref().and_then(|e| host.server_client(&e.conn)) else { return };
+    let Some(conn) = entry.as_ref().and_then(|e| host.server_client(&e.conn)) else {
+        if let Some(cancel) = &on_cancel {
+            cancel(host, tx);
+        }
+        return;
+    };
     let (recent, git) = on_server(host, server, |h| {
         let mut seen = BTreeSet::new();
         // `[...projects.list(), ...sync.data.project]`: the server's projects in its own order, most
@@ -182,6 +201,10 @@ pub fn pick(host: &mut dyn ProjectsHost, server: &ServerKey, title: String, tx: 
     })
     .unwrap_or_default();
     let was_open = host.remote_picker().is_open();
+    // The pick this one takes the place of ends with nothing.
+    if let Some(cancel) = host.remote_picker_mut().take_open().and_then(|old| old.on_cancel) {
+        cancel(host, tx);
+    }
     let return_focus = tx.focused().map(str::to_owned);
     let subtitle = host.server_label_of(server);
     let mut seq = Seq::default();
@@ -201,6 +224,7 @@ pub fn pick(host: &mut dyn ProjectsHost, server: &ServerKey, title: String, tx: 
         git,
         seq,
         on_pick,
+        on_cancel,
     });
     host.project_state_mut().home_menu_open = false;
     if !was_open {
@@ -248,6 +272,7 @@ pub fn open_preview(host: &mut dyn ProjectsHost) {
         git: BTreeSet::new(),
         seq: Seq::default(),
         on_pick: Rc::new(|h, dir, _| h.set_draft_dir(dir)),
+        on_cancel: None,
     };
     open.sync_input(&root);
     host.remote_picker_mut().set_open(open);
@@ -545,9 +570,12 @@ pub fn dismiss(host: &mut dyn ProjectsHost, tx: &mut Tx) {
 
 /// Cancel, Escape, or a press outside: the pick ends with nothing.
 pub fn close(host: &mut dyn ProjectsHost, tx: &mut Tx) {
-    if host.remote_picker_mut().take_open().is_some() {
+    if let Some(o) = host.remote_picker_mut().take_open() {
         host.on_overlay_closed(REMOTE_PICKER_OVERLAY_ID);
         tx.instant();
+        if let Some(cancel) = &o.on_cancel {
+            cancel(host, tx);
+        }
     }
 }
 

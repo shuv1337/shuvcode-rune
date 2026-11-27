@@ -59,6 +59,10 @@ impl Recall {
     pub fn forget(&self, session: &str) {
         self.marks.borrow_mut().remove(session);
     }
+
+    pub fn retain(&self, keep: &dyn Fn(&str) -> bool) {
+        self.marks.borrow_mut().retain(|id, _| keep(id));
+    }
 }
 
 impl Marks {
@@ -81,5 +85,10 @@ impl Marks {
         let mut visible = self.visible.borrow_mut();
         visible.clear();
         visible.extend(keys);
+        // Drop scrolled-off row rect handles in long sessions once the map grows large.
+        let mut rows = self.rows.borrow_mut();
+        if rows.len() > 256 {
+            rows.retain(|k, _| visible.iter().any(|v| v == k));
+        }
     }
 }

@@ -42,14 +42,22 @@ pub(crate) fn loopback(base: &str) -> bool {
     matches!(host, "127.0.0.1" | "localhost" | "[::1]") || host.starts_with("127.")
 }
 
-/// The agent a server's requests share (connections kept alive between them).
+/// The agent a server's requests share (connections kept alive between them). A plain `http://`
+/// base (the local server) reads no certificate store (`net_trust::agent_config_for`).
 pub(crate) fn agent_for(base: &str) -> ureq::Agent {
-    let config = ureq::Agent::config_builder().http_status_as_error(false).max_redirects(0).max_idle_age(IDLE_REUSE);
+    let config = net_trust::agent_config_for(base).http_status_as_error(false).max_redirects(0).max_idle_age(IDLE_REUSE);
     let config = if loopback(base) { config.proxy(None) } else { config };
     config.build().into()
 }
 
 impl Server {
+    /// The agent every request of this server shares, made on the first one: on a worker's
+    /// thread, so an `https` server's first use reads the certificate store there, not where the
+    /// server was named.
+    pub(crate) fn agent(&self) -> &ureq::Agent {
+        self.agent.get_or_init(|| agent_for(&self.base))
+    }
+
     /// One request: `body` sent as JSON when there is one, `timeout` for the whole exchange.
     pub(crate) fn exchange(&self, method: &'static str, path: &str, body: Option<&[u8]>, timeout: Option<Duration>, headers: &[(&str, &str)]) -> Result<Answer, WireError> {
         self.exchange_with_limit(method, path, body, timeout, headers, inline_limit(path))
@@ -58,7 +66,7 @@ impl Server {
     pub(crate) fn exchange_with_limit(&self, method: &'static str, path: &str, body: Option<&[u8]>, timeout: Option<Duration>, headers: &[(&str, &str)], limit: u64) -> Result<Answer, WireError> {
         let url = format!("{}{path}", self.base);
         let fail = |kind| WireError::new(method, path, kind);
-        let a = &self.agent;
+        let a = self.agent();
         let sent = match (method, body) {
             ("GET", _) => self.dress(a.get(url), headers, timeout).call(),
             ("DELETE", None) => self.dress(a.delete(url), headers, timeout).call(),

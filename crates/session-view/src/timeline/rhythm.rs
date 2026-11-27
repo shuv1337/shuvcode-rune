@@ -101,9 +101,16 @@ fn atx_heading(line: &str) -> Option<rune::TextStyle> {
     Some(crate::style::MD_H[(n - 1).min(3)])
 }
 
+/// Top half-leading of `body`'s first line in points when it starts with text (rather than a
+/// fenced block), matching `text-box: trim-both text` (`timeline-next.css:425-428`).
+pub(crate) fn prose_top_inset(body: &str) -> f32 {
+    let first = body.trim().lines().next().unwrap_or("");
+    if first.starts_with("```") { 0.0 } else { line_insets(atx_heading(first).unwrap_or(crate::style::MD)).0 }
+}
+
 /// Bottom half-leading of `body`'s last line in points when it ends in text (rather than a
 /// fenced block, table, rule, or image), matching `text-box: trim-both text` (`timeline-next.css:425-428`).
-pub(super) fn prose_bottom_trim(body: &str) -> f32 {
+pub(crate) fn prose_bottom_trim(body: &str) -> f32 {
     let last = body.trim().lines().next_back().unwrap_or("").trim();
     if last.is_empty()
         || last.ends_with("```")
@@ -124,9 +131,7 @@ pub(super) fn prose_bottom_trim(body: &str) -> f32 {
 /// `whole_rows()` rounds the trimmed height just as Blink + TanStack Virtual (`virtualizer.tsx:369`) do.
 fn prose(body: &str, turn_footer: bool, keep_bottom: bool) -> Edges {
     let footer = if turn_footer { crate::working::COPY_AT.1 + crate::working::COPY } else { 0.0 };
-    let trimmed = body.trim();
-    let first = trimmed.lines().next().unwrap_or("");
-    let top = if first.starts_with("```") { 0.0 } else { line_insets(atx_heading(first).unwrap_or(crate::style::MD)).0 };
+    let top = prose_top_inset(body);
     let bottom = if keep_bottom { prose_bottom_trim(body) } else { 0.0 };
     Edges { top, bottom, footer, ..edges(Who::Agent, Item::Prose, 0.0) }
 }
@@ -177,12 +182,16 @@ fn edges_of<'a>(t: &'a Transcript, detail: &crate::detail::Detail, script_diffs:
                 Some(Block::Subagent { .. } | Block::Group { .. } | Block::Thought { .. }) => {
                     Edges { assistant_part: true, ..edges(Who::Agent, Item::Line, LINE_INSET) }
                 }
-                Some(Block::Calls { kind, steps, .. }) => Edges {
-                    assistant_part: true,
-                    script_changes: *kind == turns::Calls::Files
-                        && steps.first().is_some_and(|st| matches!(st, turns::Step::Change { .. })),
-                    ..edges(Who::Agent, Item::Line, LINE_INSET)
-                },
+                Some(Block::Calls { kind, steps, .. }) => {
+                    let top = if *kind == turns::Calls::Files && turns::file_run_head_is_card(steps) { 0.0 } else { LINE_INSET };
+                    Edges {
+                        top,
+                        assistant_part: true,
+                        script_changes: *kind == turns::Calls::Files
+                            && steps.first().is_some_and(|st| matches!(st, turns::Step::Change { .. })),
+                        ..edges(Who::Agent, Item::Line, LINE_INSET)
+                    }
+                }
                 Some(Block::Question { .. }) => Edges { assistant_part: true, ..edges(Who::Agent, Item::Line, 0.0) },
                 None => return None,
             }

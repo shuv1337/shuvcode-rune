@@ -95,6 +95,7 @@ pub fn build() -> Kernel<App> {
     b.add_overlay_key_bands(crate::overlays::key_band::ALL);
     b.add_escape_bands(crate::overlays::escape_band::ALL);
     register_core_systems(&mut b);
+    b.with_feature(&crate::surfaces::automations::AutomationsFeature);
     b.with_feature(&crate::surfaces::egg::EggFeature);
     #[cfg(feature = "office")]
     b.with_feature(&crate::surfaces::office::OfficeFeature);
@@ -112,6 +113,7 @@ pub fn build() -> Kernel<App> {
     b.with_feature(&crate::files::FilesFeature);
     b.with_feature(&crate::find::FindFeature);
     b.with_feature(&crate::free_limit::FreeLimitFeature);
+    b.with_feature(&crate::location_missing::LocationMissingFeature);
     b.with_feature(&crate::message_nav::HistoryFeature);
     b.with_feature(&crate::queue::InboxFeature);
     b.with_feature(&crate::mcp::McpFeature);
@@ -258,12 +260,14 @@ pub fn build() -> Kernel<App> {
         .register_slot(&crate::app::MATH)
         .register_slot(&crate::session_catalog::CATALOG)
         .register_slot(&crate::session::meta::flags::FLAGS)
+        .register_slot(&crate::shell::view::sidebar::recent::HOVERED_HEADER)
         .register_slot(&crate::events::TAIL_CHANGE)
         .register_slot(&crate::events::STREAM_GAPS)
         .register_slot(&crate::speech::SPEECH)
         .register_slot(&crate::crash_notice::CRASH_NOTICE)
         .register_slot(&crate::key_sequence::SEQUENCE)
-        .register_slot(&crate::servers::dialog::DIALOG);
+        .register_slot(&crate::servers::dialog::DIALOG)
+        .register_slot(&crate::shell::memory_reclaim::SWEEP);
     let kernel = b.build();
     crate::shortcuts::validate(&kernel.commands);
     kernel

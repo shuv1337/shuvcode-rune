@@ -1085,7 +1085,7 @@
   "settings.about.otherContributor.other": "{{count}} نفر دیگر",
   "settings.about.tagline": "هوش مصنوعی بدون شما نمی‌تواند نرم‌افزار عالی بسازد",
   "settings.about.trademark": "⁨OpenCode⁩ علامت تجاری ثبت‌شدهٔ ⁨Anomaly Innovations, Inc.⁩ است",
-  "settings.about.typeset": "حروف‌چینی با ⁨Inter⁩ و ⁨IBM Plex Mono⁩",
+  "settings.about.typeset": "حروف‌چینی با ⁨Inter⁩ و ⁨OpenMono⁩",
   "settings.about.version": "نسخه ⁨{{version}}⁩",
   "settings.about.website": "⁨www.opencode.ai⁩",
   "settings.about.writtenByNames": "نوشتهٔ ⁨{{names}}⁩",
