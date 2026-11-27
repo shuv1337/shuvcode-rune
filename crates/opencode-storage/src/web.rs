@@ -25,7 +25,7 @@ use crate::machine::draft_gc::{self, BLOB_GRACE_MS, DraftGcEffect, DraftGcEvent,
 use crate::machine::write_behind::{self as wb, WriteBehindEffect, WriteBehindEvent, WriteBehindState};
 use crate::{Cmd, FlushReason, FlushReport, OutboxRow, Storage, WindowFrame};
 
-const DB: &str = "opencode-rune-storage";
+const DB: &str = "shuvcode-rune-storage";
 const STORES: [&str; 5] = ["documents", "blobs", "outbox", "previews", "caches"];
 const FRAMES: &str = "rune.window_state";
 const PLUGINS: &str = "rune.plugin";

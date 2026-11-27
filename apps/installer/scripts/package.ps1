@@ -46,7 +46,7 @@ $triple = @{ x64 = 'x86_64-pc-windows-msvc'; arm64 = 'aarch64-pc-windows-msvc' }
 if ($cross) { $target = Join-Path $target $triple }
 $bin = Join-Path $target ($(if ($Profile -eq 'release') { 'release' } else { 'debug' }))
 $flags = @(if ($Profile -eq 'release') { '--release' }) + @(if ($cross) { '--target', $triple })
-$stem = "OpenCode-Rune-$version-windows-$Arch"
+$stem = "Shuvcode-Rune-$version-windows-$Arch"
 New-Item -ItemType Directory -Force $Out | Out-Null
 $Out = (Resolve-Path $Out).Path
 
@@ -100,7 +100,7 @@ if ($Payload) {
     }
     if (-not $cross) {
         $reported = (& $exe --version | Out-String).Trim()
-        if ($reported -ne "opencode-rune $version ($channel)") { throw "opencode-desktop --version reported '$reported', expected 'opencode-rune $version ($channel)'" }
+        if ($reported -ne "shuvcode-rune $version ($channel)") { throw "opencode-desktop --version reported '$reported', expected 'shuvcode-rune $version ($channel)'" }
     }
     if ($env:OPENCODE_RUNE_BUNDLE_CLI -eq '1') {
         $js = if (Get-Command bun -ErrorAction SilentlyContinue) { 'bun' } elseif (Get-Command node -ErrorAction SilentlyContinue) { 'node' } else { throw 'Need bun or node on PATH to fetch bundled opencode-cli.' }

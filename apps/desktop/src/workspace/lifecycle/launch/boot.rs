@@ -102,7 +102,7 @@ pub fn print_version_if_asked() {
         // no reason to panic.
         std::io::Write::write_fmt(
             &mut std::io::stdout(),
-            format_args!("opencode-rune {} ({})\n", crate::updater::build_version(), crate::updater::build_channel()),
+            format_args!("shuvcode-rune {} ({})\n", crate::updater::build_version(), crate::updater::build_channel()),
         )
         .ok();
         std::process::exit(0);
@@ -156,7 +156,7 @@ pub fn window_title() -> &'static str {
     #[cfg(not(target_arch = "wasm32"))]
     let fallback = win_install::default_name(option_env!("OPENCODE_RUNE_BUILD_CHANNEL"));
     #[cfg(target_arch = "wasm32")]
-    let fallback = "OpenCode (Rune)";
+    let fallback = "Shuvcode (Rune)";
     option_env!("OPENCODE_RUNE_WINDOW_TITLE").unwrap_or(fallback)
 }
 
@@ -217,7 +217,7 @@ pub fn apply_app_icon() {
 #[cfg(all(not(target_os = "windows"), not(target_arch = "wasm32")))]
 pub fn apply_app_icon() {
     #[cfg(target_os = "linux")]
-    rune::set_app_id("opencode-rune");
+    rune::set_app_id("shuvcode-rune");
     #[cfg(not(bundle_assets))]
     {
         let bundled = std::env::current_exe()

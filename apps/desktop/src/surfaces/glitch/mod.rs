@@ -218,7 +218,7 @@ pub fn wrap(s: &App, app: El) -> El {
 #[cfg(not(target_arch = "wasm32"))]
 fn bundle_dir(s: &App) -> PathBuf {
     let base = if s.persists() { crate::dirs::data() } else { None };
-    base.unwrap_or_else(|| std::env::temp_dir().join("rune-opencode")).join("glitches").join(crate::wall_ms().to_string())
+    base.unwrap_or_else(|| std::env::temp_dir().join("shuvcode-rune")).join("glitches").join(crate::wall_ms().to_string())
 }
 
 /// The session the bundle goes to: the open one, or the last tab from Home.

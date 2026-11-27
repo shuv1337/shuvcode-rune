@@ -7,9 +7,9 @@ set -uo pipefail
 export PATH="$HOME/bin:$HOME/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../../.." && pwd)"
-APP="$HOME/Applications/OpenCode (Rune).app"
+APP="$HOME/Applications/Shuvcode (Rune).app"
 INSTALLED="$APP/Contents/MacOS/opencode-desktop"
-STAMP="$HOME/.cache/opencode-rune-build-sha"
+STAMP="$HOME/.cache/shuvcode-rune-build-sha"
 PROFILE=debug; CARGO_FLAGS=()
 for a in "$@"; do
   case "$a" in

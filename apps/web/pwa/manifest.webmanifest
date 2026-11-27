@@ -1,7 +1,7 @@
 {
   "id": "./",
-  "name": "OpenCode",
-  "short_name": "OpenCode",
+  "name": "Shuvcode (Rune)",
+  "short_name": "Shuvcode",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

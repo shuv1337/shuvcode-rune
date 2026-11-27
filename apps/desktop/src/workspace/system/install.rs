@@ -327,12 +327,12 @@ fn data_free(exe: &Path) -> Result<(), String> {
 /// `rune-opencode` under this run's `RUNE_DIRS_ROOT`.
 fn folder_of(id: &str) -> String {
     if crate::dirs::rooted() {
-        return "rune-opencode".to_owned();
+        return "shuvcode-rune".to_owned();
     }
-    match id.strip_prefix("anomaly.opencode-rune.") {
-        Some(own @ ("stable" | "beta")) => format!("rune-opencode.{own}"),
-        Some(own) => own.strip_prefix("pr.").map_or_else(|| "rune-opencode".to_owned(), |n| format!("rune-opencode.pr-{n}")),
-        None => "rune-opencode".to_owned(),
+    match id.strip_prefix("dev.shuv.shuvcode-rune.") {
+        Some(own @ ("stable" | "beta")) => format!("shuvcode-rune.{own}"),
+        Some(own) => own.strip_prefix("pr.").map_or_else(|| "shuvcode-rune".to_owned(), |n| format!("shuvcode-rune.pr-{n}")),
+        None => "shuvcode-rune".to_owned(),
     }
 }
 

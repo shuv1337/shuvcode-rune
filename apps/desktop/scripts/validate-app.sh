@@ -8,8 +8,8 @@ set -eu
 bundle=$1
 version=$2
 channel=$3
-expected_name=${OPENCODE_RUNE_APP_NAME:-OpenCode (Rune)}
-expected_id=${OPENCODE_RUNE_BUNDLE_ID:-anomaly.opencode-rune}
+expected_name=${OPENCODE_RUNE_APP_NAME:-Shuvcode (Rune)}
+expected_id=${OPENCODE_RUNE_BUNDLE_ID:-dev.shuv.shuvcode-rune}
 team_id=${SEER_TEAM_ID:?Set SEER_TEAM_ID to the Apple Developer signing team}
 plist="$bundle/Contents/Info.plist"
 
@@ -31,7 +31,7 @@ plist_value() {
 plist_value NSMicrophoneUsageDescription > /dev/null || fail "no microphone usage description"
 [ -x "$bundle/Contents/MacOS/opencode-desktop" ] || fail "packaged executable is missing"
 [ "$(lipo -archs "$bundle/Contents/MacOS/opencode-desktop")" = "$(uname -m)" ] || fail "packaged executable does not match the native verify runner"
-[ "$("$bundle/Contents/MacOS/opencode-desktop" --version)" = "opencode-rune $version ($channel)" ] || fail "opencode-desktop --version is not $version ($channel)"
+[ "$("$bundle/Contents/MacOS/opencode-desktop" --version)" = "shuvcode-rune $version ($channel)" ] || fail "opencode-desktop --version is not $version ($channel)"
 
 codesign --verify --deep --strict --verbose=2 "$bundle"
 # Every library of the bundle: the hardened runtime loads one only with the app's own team's signature.

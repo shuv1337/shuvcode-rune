@@ -169,7 +169,7 @@ mod native {
 
     fn start() -> Option<Recorder> {
         let dir = crate::dirs::logs()?.join("perf");
-        let config = Config::new(dir, "OpenCode (Rune)").build(env!("CARGO_PKG_VERSION"));
+        let config = Config::new(dir, "Shuvcode (Rune)").build(env!("CARGO_PKG_VERSION"));
         match Recorder::start(config) {
             Ok(r) => {
                 // The first call only sets this thread's baseline.

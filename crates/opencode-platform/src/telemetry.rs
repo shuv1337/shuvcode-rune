@@ -51,7 +51,7 @@ fn record(parent: Ctx, name: &'static str, (start, end): (Instant, Instant), att
 const FOLLOW: Duration = Duration::from_secs(30);
 
 fn on() -> bool {
-    otlp_lite::start("opencode-rune", env!("CARGO_PKG_VERSION"), enabled().then(|| otlp_lite::endpoint("1")).flatten());
+    otlp_lite::start("shuvcode-rune", env!("CARGO_PKG_VERSION"), enabled().then(|| otlp_lite::endpoint("1")).flatten());
     otlp_lite::on()
 }
 

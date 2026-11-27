@@ -80,7 +80,8 @@ pub use upload::UploadError;
 pub use wire::{Incoming, Request, Ticket, TicketKind, Write};
 pub use worker::{connect, connect_with_idle};
 
-pub const DEFAULT_SERVER: &str = "http://127.0.0.1:4096";
+// shuv1337 fork: Shuvcode's default service port is 0x1337 (4919).
+pub const DEFAULT_SERVER: &str = "http://127.0.0.1:4919";
 
 /// The server to use when no `--server` was passed: `OPENCODE_SERVER_URL` when set (a Mac that
 /// reaches another Mac's server through a tunnel sets it with `launchctl setenv`, so opening the

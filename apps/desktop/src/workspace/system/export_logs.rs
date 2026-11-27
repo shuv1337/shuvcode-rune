@@ -57,7 +57,7 @@ fn write_archive(now: i64, downloads: &Path, logs: Option<&Path>, server_logs: &
     let manifest = json!({
         "generated": crate::motion_log::iso(now as f64),
         "version": env!("CARGO_PKG_VERSION"),
-        "name": "OpenCode (Rune)",
+        "name": "Shuvcode (Rune)",
         "packaged": !cfg!(debug_assertions),
         "platform": platform(),
         "arch": arch(),

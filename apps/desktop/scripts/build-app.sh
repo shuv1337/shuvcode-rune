@@ -41,10 +41,10 @@ OUT=${1:?usage: build-app.sh OUT}
 : "${OPENCODE_RUNE_VERSION:?Set OPENCODE_RUNE_VERSION}"
 : "${OPENCODE_RUNE_BUILD_CHANNEL:?Set OPENCODE_RUNE_BUILD_CHANNEL}"
 ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
-APP_NAME=${OPENCODE_RUNE_APP_NAME:-OpenCode (Rune)}
-BUNDLE_ID=${OPENCODE_RUNE_BUNDLE_ID:-anomaly.opencode-rune}
+APP_NAME=${OPENCODE_RUNE_APP_NAME:-Shuvcode (Rune)}
+BUNDLE_ID=${OPENCODE_RUNE_BUNDLE_ID:-dev.shuv.shuvcode-rune}
 ICON_PATH=${OPENCODE_RUNE_ICON:-$ROOT/apps/desktop/assets/icon.icns}
-URL_SCHEME=${OPENCODE_RUNE_URL_SCHEME:-opencode-rune}
+URL_SCHEME=${OPENCODE_RUNE_URL_SCHEME:-shuvcode-rune}
 PROFILE=${OPENCODE_RUNE_PROFILE:-release}
 # A pull request from a branch with "thin-build" in its name is built as the dev channel builds
 # (release-thin: thin LTO, no profile), so a change can be sized and timed as that channel ships it.
@@ -194,7 +194,7 @@ if [ -n "$expected_arch" ] && command -v lipo >/dev/null 2>&1; then
 fi
 
 if [ "$cross" = "0" ]; then
-  EXPECTED_VER="opencode-rune $OPENCODE_RUNE_VERSION ($OPENCODE_RUNE_BUILD_CHANNEL)"
+  EXPECTED_VER="shuvcode-rune $OPENCODE_RUNE_VERSION ($OPENCODE_RUNE_BUILD_CHANNEL)"
   ACTUAL_VER=$("$BIN" --version)
   [ "$ACTUAL_VER" = "$EXPECTED_VER" ] || {
     echo "opencode-desktop --version reported '$ACTUAL_VER', expected '$EXPECTED_VER'" >&2
@@ -316,23 +316,23 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>CFBundleURLTypes</key><array><dict><key>CFBundleURLName</key><string>$ESC_ID</string><key>CFBundleURLSchemes</key><array><string>$ESC_SCHEME</string></array></dict></array>
-  <key>NSMicrophoneUsageDescription</key><string>OpenCode (Rune) uses the microphone when you dictate prompts or join voice sessions.</string>
+  <key>NSMicrophoneUsageDescription</key><string>Shuvcode (Rune) uses the microphone when you dictate prompts or join voice sessions.</string>
   <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
   <key>LSApplicationCategoryType</key><string>public.app-category.developer-tools</string>
-  <key>NSHumanReadableCopyright</key><string>Copyright © $(date +%Y) OpenCode</string>
+  <key>NSHumanReadableCopyright</key><string>Copyright © $(date +%Y) Shuvcode (fork of OpenCode)</string>
   <key>NSSupportsAutomaticGraphicsSwitching</key><true/>
-  <key>NSDesktopFolderUsageDescription</key><string>OpenCode (Rune) uses files on your Desktop for projects you open and commands you run there.</string>
-  <key>NSDocumentsFolderUsageDescription</key><string>OpenCode (Rune) uses files in your Documents folder for projects you open and commands you run there.</string>
-  <key>NSDownloadsFolderUsageDescription</key><string>OpenCode (Rune) uses files in your Downloads folder for projects you open and commands you run there.</string>
-  <key>NSNetworkVolumesUsageDescription</key><string>OpenCode (Rune) uses files on network volumes for projects you open and commands you run there.</string>
-  <key>NSRemovableVolumesUsageDescription</key><string>OpenCode (Rune) uses files on removable volumes for projects you open and commands you run there.</string>
+  <key>NSDesktopFolderUsageDescription</key><string>Shuvcode (Rune) uses files on your Desktop for projects you open and commands you run there.</string>
+  <key>NSDocumentsFolderUsageDescription</key><string>Shuvcode (Rune) uses files in your Documents folder for projects you open and commands you run there.</string>
+  <key>NSDownloadsFolderUsageDescription</key><string>Shuvcode (Rune) uses files in your Downloads folder for projects you open and commands you run there.</string>
+  <key>NSNetworkVolumesUsageDescription</key><string>Shuvcode (Rune) uses files on network volumes for projects you open and commands you run there.</string>
+  <key>NSRemovableVolumesUsageDescription</key><string>Shuvcode (Rune) uses files on removable volumes for projects you open and commands you run there.</string>
 </dict></plist>
 PLIST
 plutil -lint "$APP/Contents/Info.plist" >/dev/null
 codesign --force --sign - "$APP"
 if [ "$LAYERS" = 1 ] && [ "$cross" = "0" ]; then
   # The packaged exe finds its libraries in the bundle (the check above ran it where cargo built it).
-  [ "$("$APP/Contents/MacOS/opencode-desktop" --version)" = "opencode-rune $OPENCODE_RUNE_VERSION ($OPENCODE_RUNE_BUILD_CHANNEL)" ] || {
+  [ "$("$APP/Contents/MacOS/opencode-desktop" --version)" = "shuvcode-rune $OPENCODE_RUNE_VERSION ($OPENCODE_RUNE_BUILD_CHANNEL)" ] || {
     echo "the packaged opencode-desktop does not run with its libraries in Contents/Frameworks" >&2
     exit 1
   }

@@ -18,10 +18,10 @@
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#080808">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="OpenCode">
+<meta name="apple-mobile-web-app-title" content="Shuvcode">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="modulepreload" href="app.js">
-<title>OpenCode (Rune)</title>
+<title>Shuvcode (Rune)</title>
 <style>
   html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; overscroll-behavior: none; touch-action: none; }
   /* The app's window colour (bg-deep), so nothing flashes between the launch screen and the first frame. */
@@ -57,7 +57,7 @@
 <form id="connect" class="box" method="post" action="#">
   <h1 data-say="rune.web.connect.title"></h1>
   <label for="server" data-say="rune.web.connect.server"></label>
-  <input id="server" name="url" type="url" autocomplete="url" placeholder="http://127.0.0.1:4096" required>
+  <input id="server" name="url" type="url" autocomplete="url" placeholder="http://127.0.0.1:4919" required>
   <!-- The server's user is always opencode: here so a password manager saves and fills the pair. -->
   <input name="username" autocomplete="username" value="opencode" hidden>
   <label for="password" data-say="rune.web.connect.password"></label>

@@ -62,9 +62,21 @@ pub trait Platform: Send + Sync + 'static {
     }
 }
 
+#[inline]
+fn fork_updater_enabled() -> bool {
+    // shuv1337 fork: never check or install updates from Anomaly's `https://anoma.ly/release`
+    // feed. Keeping the upstream platform updaters behind this gate ensures a Shuvcode (Rune)
+    // build never prompts for or overwrites itself with upstream OpenCode (Rune).
+    false
+}
+
 /// This build's updater, or `None` where none runs (a development build, a build without a
 /// release feed, a bare `cargo` binary on macOS). Linux only checks: it offers the download.
 pub fn make(exe: &Path, version: &str, build_channel: &str, updates: PathBuf) -> Option<Arc<dyn Platform>> {
+    if !fork_updater_enabled() {
+        let _ = (exe, version, build_channel, updates);
+        return None;
+    }
     #[cfg(target_os = "macos")]
     {
         let _ = (version, build_channel);

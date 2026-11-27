@@ -1,7 +1,7 @@
 [package]
 name = "opencode-rune-setup"
 version = "0.0.1"
-description = "OpenCode (Rune)'s Windows setup: one click installs the app for the user, with no administrator"
+description = "Shuvcode (Rune)'s Windows setup: one click installs the app for the user, with no administrator"
 edition.workspace = true
 license.workspace = true
 

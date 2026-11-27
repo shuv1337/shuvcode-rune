@@ -30,8 +30,8 @@ use rune::dirs::AppDirs;
 
 use crate::App;
 
-const APP_ID: &str = "rune-opencode";
-const DEBUG_APP_ID: &str = "rune-opencode.debug";
+const APP_ID: &str = "shuvcode-rune";
+const DEBUG_APP_ID: &str = "shuvcode-rune.debug";
 
 /// The app's folders, for code that removes them (`install`).
 pub(crate) fn app() -> Option<&'static AppDirs> {
@@ -55,10 +55,10 @@ fn release_id() -> &'static str {
 }
 
 fn pr_id() -> String {
-    match option_env!("OPENCODE_RUNE_BUNDLE_ID").and_then(|id| id.strip_prefix("anomaly.opencode-rune.pr.")) {
+    match option_env!("OPENCODE_RUNE_BUNDLE_ID").and_then(|id| id.strip_prefix("dev.shuv.shuvcode-rune.pr.")) {
         Some(n) if !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()) => format!("{APP_ID}.pr-{n}"),
         // Stable and beta are apps of their own beside dev's (`win_install::side_by_side`), each
-        // with its own `userData` as OpenCode Desktop's channels have; dev keeps `rune-opencode`.
+        // with its own `userData` as OpenCode Desktop's channels have; dev keeps `shuvcode-rune`.
         _ => match option_env!("OPENCODE_RUNE_BUILD_CHANNEL") {
             Some(c @ ("stable" | "beta")) => format!("{APP_ID}.{c}"),
             _ => APP_ID.to_owned(),
@@ -90,7 +90,7 @@ pub fn cache() -> Option<PathBuf> {
 /// macOS keeps the folder it always had.
 pub fn logs() -> Option<PathBuf> {
     let app = app()?;
-    Some(if cfg!(target_os = "macos") { app.sibling("opencode-rune").logs().to_owned() } else { app.logs().to_owned() })
+    Some(if cfg!(target_os = "macos") { app.sibling("shuvcode-rune").logs().to_owned() } else { app.logs().to_owned() })
 }
 
 /// The motion log (`motion.jsonl`).
@@ -104,8 +104,8 @@ pub fn motion_log() -> Option<PathBuf> {
 pub fn updates() -> Option<PathBuf> {
     let app = app()?;
     let bundle = match option_env!("OPENCODE_RUNE_BUILD_CHANNEL") {
-        Some(c @ ("stable" | "beta")) => format!("anomaly.opencode-rune.{c}"),
-        _ => "anomaly.opencode-rune".to_owned(),
+        Some(c @ ("stable" | "beta")) => format!("dev.shuv.shuvcode-rune.{c}"),
+        _ => "dev.shuv.shuvcode-rune".to_owned(),
     };
     let cache = if cfg!(target_os = "macos") { app.sibling(&bundle).cache().to_owned() } else { app.cache().to_owned() };
     Some(cache.join("Updates"))

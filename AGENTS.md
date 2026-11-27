@@ -1,6 +1,19 @@
-# OpenCode (Rune) (`opencode-rune`)
+# Shuvcode (Rune) (`shuv1337/shuvcode-rune`)
 
-`anomalyco/opencode-rune` houses **OpenCode (Rune)** (`apps/desktop`, `apps/web`, `apps/installer`) and the shared Rust crates (`crates/*`) that any Rune app can embed by git dependency.
+`shuv1337/shuvcode-rune` is the **Shuvcode (Rune)** maintained fork of **OpenCode (Rune)** (`anomalyco/opencode-rune`). It houses `apps/desktop`, `apps/web`, `apps/installer`, and the shared Rust crates (`crates/*`) that any Rune app can embed by git dependency.
+
+## Shuvcode Fork
+
+[`docs/fork-contract.md`](docs/fork-contract.md) is the authoritative identity, compatibility, and upstream-sync contract. Do not undo these invariants when merging `upstream/dev` or refactoring:
+
+- **Default branch & remotes:** `origin` is `shuv1337/shuvcode-rune` (default branch `dev`); `upstream` is `anomalyco/opencode-rune` (`upstream/dev`). Default pull requests target `dev` on `origin`, never `upstream`.
+- **Canonical identity:** display name `Shuvcode (Rune)`, executable/package/app-id/scheme `shuvcode-rune`, bundle/AppUserModelID family `dev.shuv.shuvcode-rune`, app data/config/cache/log dirs `shuvcode-rune`, web IndexedDB `shuvcode-rune-storage`, publisher `Shuvcode`, homepage `https://github.com/shuv1337/shuvcode-rune`.
+- **Compatibility boundary:** internal Cargo crate names (`opencode-desktop`, `opencode-kit`, `opencode-feature-*`, etc.), `OPENCODE_*` / `OPENCODE_RUNE_*` / `RUNE_DIRS_ROOT` env vars, HTTP API & auth username `opencode`, `opencode.sqlite` & DB namespaces, shared `co.anomaly.opencode` browser engine, and `anomalyco/rune` git rev pin stay as upstream so merges remain low-conflict.
+- **Deliberate deltas:**
+  1. Never install or start a local OpenCode server (`sidecar::managed()` is always `false`; `OPENCODE_RUNE_BUNDLE_CLI` defaults to `0`).
+  2. Discover `<state>/shuvcode/service.json` and `<config>/shuvcode/service.json` ahead of `opencode/`, accept non-loopback (Tailscale) `service.json` hosts with their passwords, and default fallback `DEFAULT_SERVER` to `http://127.0.0.1:4919` (`0x1337`).
+  3. Never auto-update from Anomaly's `https://anoma.ly/release` feed (`features/updater/src/platform.rs`).
+- **Regular upstream syncs:** run `scripts/fork-sync.sh` to inspect incoming `upstream/dev` commits and `scripts/fork-sync.sh --merge` to merge `upstream/dev`, then run `scripts/guardrails.sh` (which includes `fork-boundary`) and `scripts/clippy.sh`.
 
 ## Layout (Progressive Disclosure)
 
