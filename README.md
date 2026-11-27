@@ -90,6 +90,10 @@ scripts/fork-sync.sh --merge   # fetch and merge upstream/dev into current branc
 
 Run `scripts/clippy.sh` separately for workspace-wide `-D warnings` checks across feature sets.
 
+## Roadmap
+
+See [drag-and-drop status and roadmap](docs/drag-and-drop.md) for current desktop gestures and planned improvements to the composer, Files tree, and Review.
+
 ## Attribution and License
 
 Shuvcode (Rune) is a fork of [OpenCode (Rune)](https://github.com/anomalyco/opencode-rune), built by Anomaly on [Rune](https://github.com/anomalyco/rune), and is not affiliated with or endorsed by Anomaly. Licensed under the [MIT License](LICENSE); see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
