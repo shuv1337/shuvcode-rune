@@ -1523,7 +1523,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ## 6. MPL-2.0 Rust Dependencies
 
-The following 14 crates in `Cargo.lock` are licensed under the **Mozilla Public License, Version 2.0** (`https://mozilla.org/MPL/2.0/`). OpenCode (Rune) uses these crates unmodified; their complete source code is publicly available at the upstream repositories below and on crates.io (`https://crates.io/crates/<name>/<version>`). In accordance with MPL-2.0 Section 3.2(a), any covered source code remains available under the terms of the MPL-2.0.
+The following 13 crates in `Cargo.lock` are licensed under the **Mozilla Public License, Version 2.0** (`https://mozilla.org/MPL/2.0/`). OpenCode (Rune) uses these crates unmodified; their complete source code is publicly available at the upstream repositories below and on crates.io (`https://crates.io/crates/<name>/<version>`). In accordance with MPL-2.0 Section 3.2(a), any covered source code remains available under the terms of the MPL-2.0.
 
 | Crate | Version | Source |
 | --- | --- | --- |
@@ -1533,7 +1533,6 @@ The following 14 crates in `Cargo.lock` are licensed under the **Mozilla Public 
 | `dtoa-short` | `0.3.5` | `https://github.com/upsuper/dtoa-short` |
 | `opuscule` | `0.2.2` | `https://github.com/bryal/opuscule` |
 | `selectors` | `0.31.0` | `https://github.com/servo/stylo` |
-| `spellbook` | `0.4.2` | `https://github.com/helix-editor/spellbook` |
 | `symphonia` | `0.5.5` | `https://github.com/pdeljanov/Symphonia` |
 | `symphonia-codec-vorbis` | `0.5.5` | `https://github.com/pdeljanov/Symphonia` |
 | `symphonia-core` | `0.5.5` | `https://github.com/pdeljanov/Symphonia` |
